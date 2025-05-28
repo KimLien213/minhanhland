@@ -41,7 +41,7 @@ const loadedPages = ref(new Set()); // Track các page đã load
 // Parameters for API calls
 const lazyParams = ref({
     page: 1,
-    limit: 20,
+    limit: 50,
     sortBy: null,
     sortOrder: 'ASC',
     search: '',
@@ -182,7 +182,7 @@ async function fetchInitialData() {
 
     try {
         lazyLoading.value = true;
-        const params = { ...lazyParams.value, page: 1, limit: 20 };
+        const params = { ...lazyParams.value, page: 1, limit: 50 };
         const response = await productService.getAll(params);
         const data = response.data;
 
@@ -229,7 +229,7 @@ const loadProductsLazy = async (event) => {
     if (lazyLoading.value) return;
 
     const { first, last } = event;
-    const pageSize = 20;
+    const pageSize = 50;
     const startPage = Math.floor(first / pageSize) + 1;
     const endPage = Math.ceil(last / pageSize);
 
@@ -591,36 +591,36 @@ const getMe = async () => {
 };
 
 const columnDefaults = ref([
-    { key: 'buildingCode', label: 'Mã tòa', frozen: !isMobile.value, width: 8, filterable: true },
-    { key: 'apartmentCode', label: 'Mã căn', frozen: !isMobile.value, width: 8 },
-    { key: 'apartmentEncode', label: 'Mã căn x', frozen: !isMobile.value, width: 8 },
-    { key: 'area', label: 'S (m2)', type: 's', width: 8, filterable: true },
-    { key: 'sellingPrice', label: 'Giá bán', width: 10 },
-    { key: 'tax', label: 'Thuế phí', type: 'money', width: 10 },
-    { key: 'furnitureNote', label: 'Nội thất', width: 10, filterable: true },
-    { key: 'mortgageInfo', label: 'TT Sổ đỏ + Vay', width: 15, filterable: true },
-    { key: 'description', label: 'Lưu ý', width: 10 },
-    { key: 'balconyDirection', label: 'Ban công', type: 'tag', color: (value) => getDirectionColor(value), width: 10, filterable: true },
+    { key: 'buildingCode', label: 'Mã tòa', frozen: !isMobile.value, width: isMobile ? 6 : 7, filterable: true, maxWidth: 8 },
+    { key: 'apartmentCode', label: 'Mã căn', frozen: true, width: isMobile ? 4 : 5, maxWidth: 8 },
+    { key: 'apartmentEncode', label: 'Mã căn x', frozen: !isMobile.value, width: isMobile ? 4 : 5 },
+    { key: 'area', label: isMobile ? 'S' : 'S (m2)', type: 's', width: isMobile ? 4 : 6.5, filterable: true, maxWidth: 6.5 },
+    { key: 'sellingPrice', label: 'Giá bán', width: 5, maxWidth: 6.5 },
+    { key: 'tax', label: 'Thuế phí', type: 'money', width: 6, maxWidth: 6 },
+    { key: 'furnitureNote', label: 'Nội thất', width: 6, filterable: true, maxWidth: 8 },
+    { key: 'mortgageInfo', label: 'TT Sổ đỏ + Vay', width: 11, filterable: true, maxWidth: 15 },
+    { key: 'description', label: 'Lưu ý', width: 10, maxWidth: 12 },
+    { key: 'balconyDirection', label: 'Ban công', type: 'tag', color: (value) => getDirectionColor(value), width: 8, filterable: true },
     { key: 'updatedAt', label: 'Ngày cập nhật', type: 'date', width: 8 },
     {
         key: 'imageList',
         label: 'Hình ảnh',
         type: 'images',
-        width: 10,
+        width: 8,
         sortable: false
     },
     {
         key: 'status',
         label: 'Trạng thái',
         type: 'tag',
-        width: 10,
+        width: 9,
         color: (value) => getStatusColor(value).color,
         text: (value) => getStatusColor(value).text,
         filterable: true
     },
-    { key: 'apartmentContactInfo', label: 'SĐT Liên hệ', type: 'phone', width: 13, filterable: true },
-    { key: 'contactInfo', label: 'Liên hệ', type: 'phone', width: 10, filterable: true },
-    { key: 'source', label: 'Báo nguồn', type: 'phone', width: 10, filterable: true }
+    { key: 'apartmentContactInfo', label: 'SĐT Liên hệ', type: 'phone', width: 10, filterable: true },
+    { key: 'contactInfo', label: 'Liên hệ', type: 'phone', width: 8, filterable: true },
+    { key: 'source', label: 'Báo nguồn', type: 'phone', width: 9, filterable: true }
 ]);
 
 const onColumnReorder = (event) => {
@@ -631,6 +631,7 @@ const onColumnReorder = (event) => {
 
 // refs cho từng cột
 const multiSelectRefs = reactive({});
+const multiSelectFullRefs = reactive({});
 
 // Tạo toggle function để mở đúng dropdown
 const toggleFilter = (key) => {
@@ -641,9 +642,22 @@ const toggleFilter = (key) => {
     });
 };
 
+const toggleFilterFull = (key) => {
+    if (!multiSelectFullRefs[key]) return;
+
+    nextTick(() => {
+        multiSelectFullRefs[key]?.show();
+    });
+};
+
 const setMultiSelectRef = (key, el) => {
     if (el) {
         multiSelectRefs[key] = el;
+    }
+};
+const setMultiSelectFullRef = (key, el) => {
+    if (el) {
+        multiSelectFullRefs[key] = el;
     }
 };
 
@@ -756,6 +770,8 @@ const showImages = (images) => {
         return { url: import.meta.env.VITE_API_URL + t.url };
     });
 };
+
+const fullScreen = ref(false);
 </script>
 
 <template>
@@ -772,6 +788,7 @@ const showImages = (images) => {
                 ref="dt"
                 :value="virtualProducts"
                 dataKey="id"
+                size="small"
                 v-model:selection="selectedProducts"
                 :filters="filters"
                 resizableColumns
@@ -800,14 +817,12 @@ const showImages = (images) => {
                 <template #empty>
                     <span>Không có căn hộ nào.</span>
                 </template>
-
                 <template #header>
-                    <div class="flex flex-wrap gap-2 items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <h4 class="m-0">Danh sách căn hộ</h4>
-                            <span class="text-sm text-gray-500">({{ totalRecords }} căn hộ)</span>
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full">
+                        <div class="flex items-start gap-2">
+                            <span class="text-sm font-bold">Tống số: {{ totalRecords }} căn hộ</span>
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-end gap-2">
                             <IconField>
                                 <InputIcon>
                                     <i class="pi pi-search" />
@@ -815,10 +830,10 @@ const showImages = (images) => {
                                 <InputText v-model="filters['global'].value" placeholder="Tìm kiếm..." />
                             </IconField>
                             <Button type="button" @click="resetData" icon="pi pi-refresh" text />
+                            <Button type="button" icon="pi pi-window-maximize" @click="fullScreen = true" text />
                         </div>
                     </div>
                 </template>
-
                 <Column selectionMode="multiple" :frozen="!isMobile" style="width: 3rem; height: 60px" :exportable="false">
                     <template #loading>
                         <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
@@ -834,10 +849,10 @@ const showImages = (images) => {
                     :sortField="item.key"
                     :showFilterMatchModes="false"
                     :frozen="item.frozen && !isMobile"
-                    :style="{ minWidth: `${item.width}rem`, height: '60px' }"
+                    :style="{ minWidth: `${item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
                     :class="item.frozen ? 'font-bold' : ''"
                 >
-                    <template #body="{ data, index }">
+                    <template #body="{ data }">
                         <!-- Hiển thị skeleton cho placeholder -->
                         <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
                             <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
@@ -1097,5 +1112,197 @@ const showImages = (images) => {
                 <Button label="Đóng" icon="pi pi-times" text @click="showImageGalery = false" />
             </template>
         </Dialog>
+        <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
+            <div class="responsive-zoom-table">
+                <DataTable
+                    ref="dt"
+                    :value="virtualProducts"
+                    dataKey="id"
+                    size="small"
+                    v-model:selection="selectedProducts"
+                    :filters="filters"
+                    resizableColumns
+                    columnResizeMode="expand"
+                    stripedRows
+                    reorderableColumns
+                    scrollable
+                    scrollHeight="flex"
+                    scrollDirection="horizontal"
+                    class="p-datatable-sm"
+                    filterDisplay="menu"
+                    tableStyle="min-width: 50rem"
+                    :virtualScrollerOptions="{
+                        lazy: true,
+                        onLazyLoad: loadProductsLazy,
+                        itemSize: 60,
+                        delay: 0,
+                        showLoader: true,
+                        loading: lazyLoading,
+                        numToleratedItems: 5,
+                        step: 5
+                    }"
+                    @columnReorder="onColumnReorder"
+                    @sort="onSort"
+                    @filter="onFilter"
+                >
+                    <template #empty>
+                        <span>Không có căn hộ nào.</span>
+                    </template>
+
+                    <template #header>
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 w-full">
+                            <div class="flex items-end gap-2">
+                                <IconField>
+                                    <InputIcon>
+                                        <i class="pi pi-search" />
+                                    </InputIcon>
+                                    <InputText v-model="filters['global'].value" class="w-full" placeholder="Tìm kiếm..." />
+                                </IconField>
+                                <Button type="button" @click="resetData" icon="pi pi-refresh" text />
+                            </div>
+                        </div>
+                    </template>
+
+                    <Column
+                        v-for="item in columns"
+                        :sortable="item.sortable !== false"
+                        :key="item.key"
+                        :sortField="item.key"
+                        :showFilterMatchModes="false"
+                        :frozen="item.frozen && !isMobile"
+                        :style="{ minWidth: `${item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
+                        :class="item.frozen ? 'font-bold' : ''"
+                    >
+                        <template #body="{ data }">
+                            <!-- Hiển thị skeleton cho placeholder -->
+                            <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
+                                <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
+                            </div>
+                            <!-- Render data với v-else-if để tối ưu -->
+                            <template v-else>
+                                <div v-if="item.type === 'tag'" class="flex items-center gap-2">
+                                    <Tag :value="!item.text ? data[item.key] : item.text(data[item.key])" :severity="item.color(data[item.key])" :style="{ backgroundColor: item.color(data[item.key]), color: '#000' }" />
+                                </div>
+                                <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
+                                    <span>{{ Number(data[item.key] || 0) }}m²</span>
+                                </div>
+                                <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key] || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
+                                <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
+                                    <Button v-if="data[item.key]?.length > 0" @click="showImages(data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
+                                    <span v-else>Không có ảnh</span>
+                                </div>
+                                <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
+                                    <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
+                                        <i class="pi pi-phone text-lg"></i>
+                                        <span>{{ formatPhoneNumber(data[item.key]) }}</span>
+                                    </a>
+                                </div>
+                                <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
+                                    <span>{{ data[item.key] ? format(new Date(data[item.key]), 'yyyy-MM-dd') : null }}</span>
+                                </div>
+                                <div v-else class="flex items-center gap-2">
+                                    <span>{{ data[item.key] || '' }}</span>
+                                </div>
+                            </template>
+                        </template>
+
+                        <template #loading>
+                            <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
+                                <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
+                            </div>
+                        </template>
+
+                        <template #header>
+                            <div class="relative w-full h-full">
+                                <span class="inline-block font-bold">{{ item.label }}</span>
+
+                                <i
+                                    class="pi pi-filter absolute right-0 top-1/2 -translate-y-1/2 cursor-pointer"
+                                    v-if="item.filterable"
+                                    :class="filters[item.key]?.value?.length ? 'text-blue-500' : 'text-gray-400 hover:text-gray-700'"
+                                    @click.stop="toggleFilterFull(item.key)"
+                                ></i>
+
+                                <MultiSelect
+                                    v-if="item.filterable"
+                                    :ref="(el) => setMultiSelectFullRef(item.key, el)"
+                                    v-model="filters[item.key].value"
+                                    :options="filterOptions[item.key]"
+                                    @change="onFilter"
+                                    filter
+                                    display="chip"
+                                    panelClass="z-50"
+                                    panelStyle="width: 150px"
+                                    placeholder="Lọc..."
+                                    class="absolute top-full right-0 w-0 h-0 p-0 overflow-hidden border-none shadow-none focus:ring-0"
+                                >
+                                    <template #option="slotProps">
+                                        <div v-if="item.type === 'tag'" class="flex items-center gap-2">
+                                            <Tag :value="!item.text ? slotProps.option : item.text(slotProps.option)" :severity="item.color(slotProps.option)" :style="{ backgroundColor: item.color(slotProps.option), color: '#000' }" />
+                                        </div>
+                                        <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
+                                            <span>{{ Number(slotProps.option) }}m²</span>
+                                        </div>
+                                        <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(slotProps.option).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
+                                        <div v-else-if="item.type === 'link'" class="flex items-center gap-2">
+                                            <i class="pi pi-paperclip"></i>
+                                            <span>Hình ảnh</span>
+                                        </div>
+                                        <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
+                                            <span>{{ slotProps.option ? format(new Date(slotProps.option), 'yyyy-MM-dd') : null }}</span>
+                                        </div>
+                                        <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
+                                            <span>{{ formatPhoneNumber(slotProps.option) }}</span>
+                                        </div>
+                                        <div v-else class="flex items-center gap-2">
+                                            <span>{{ slotProps.option }}</span>
+                                        </div>
+                                    </template>
+                                    <template #footer>
+                                        <div class="flex justify-end p-2 border-t">
+                                            <button type="button" class="text-xs text-blue-500 hover:underline" @click.stop="clearFilter(item.key)">Xóa lọc</button>
+                                        </div>
+                                    </template>
+                                </MultiSelect>
+                            </div>
+                        </template>
+                    </Column>
+
+                    <Column :exportable="false" style="min-width: 12rem; height: 60px">
+                        <template #body="{ data }">
+                            <!-- Skeleton cho placeholder -->
+                            <div v-if="!data || data.isPlaceholder" class="flex items-center gap-2" style="height: 17px">
+                                <Skeleton width="2rem" height="2rem" class="rounded-full" />
+                                <Skeleton width="2rem" height="2rem" class="rounded-full" />
+                            </div>
+                            <!-- Action buttons -->
+                            <div v-else class="flex items-center gap-2">
+                                <Button icon="pi pi-pencil" outlined rounded size="small" @click="editProduct(data)" />
+                                <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="confirmDeleteProduct(data)" />
+                            </div>
+                        </template>
+                    </Column>
+                </DataTable>
+            </div>
+        </Drawer>
     </div>
 </template>
+<style scoped>
+/* Chỉ áp dụng khi chiều rộng nhỏ hơn 768px (điện thoại) */
+@media screen and (max-width: 768px) {
+    .responsive-zoom-table {
+        transform-origin: top left;
+        width: 100%;
+        height: 100%;
+    }
+
+    :deep(.p-datatable) {
+        font-size: 0.85rem;
+    }
+
+    :deep(.p-column-header-content),
+    :deep(.p-cell-content) {
+        padding: 0.25rem 0.5rem;
+    }
+}
+</style>
