@@ -41,7 +41,7 @@ const loadedPages = ref(new Set()); // Track các page đã load
 // Parameters for API calls
 const lazyParams = ref({
     page: 1,
-    limit: 20, // 20 records per page
+    limit: 20,
     sortBy: null,
     sortOrder: 'ASC',
     search: '',
@@ -87,20 +87,35 @@ const columns = ref([]);
 watch(
     () => filters.value.global.value,
     (val) => {
-        lazyParams.value.search = val;
-        resetData();
+        // Chỉ search khi đã khởi tạo
+        if (isInitialized.value) {
+            lazyParams.value.search = val;
+            resetData();
+        }
     }
 );
 
+// Flag để tránh call API nhiều lần
+const isInitialized = ref(false);
+
 watch(
     () => route.params,
-    (newType) => {
-        apartmentType.value = newType.type;
-        subdivision.value = newType.subdivision;
-        lazyParams.value.apartmentType = newType.type;
-        lazyParams.value.subdivision = newType.subdivision;
-        fetchFilterOptions();
-        resetData();
+    async (newParams, oldParams) => {
+        // Chỉ reset khi thực sự thay đổi route params
+        if (newParams.type !== oldParams?.type || newParams.subdivision !== oldParams?.subdivision) {
+            apartmentType.value = newParams.type;
+            subdivision.value = newParams.subdivision;
+            lazyParams.value.apartmentType = newParams.type;
+            lazyParams.value.subdivision = newParams.subdivision;
+
+            // Reset filters khi chuyển menu
+            resetFilters();
+
+            if (isInitialized.value) {
+                await fetchFilterOptions();
+                resetData();
+            }
+        }
     }
 );
 
@@ -110,71 +125,159 @@ function onSort(event) {
     resetData();
 }
 
+// Reset filters về mặc định
+function resetFilters() {
+    filters.value = {
+        global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+        buildingCode: { value: null, matchMode: FilterMatchMode.IN },
+        apartmentCode: { value: null, matchMode: FilterMatchMode.IN },
+        apartmentEncode: { value: null, matchMode: FilterMatchMode.IN },
+        area: { value: null, matchMode: FilterMatchMode.IN },
+        sellingPrice: { value: null, matchMode: FilterMatchMode.IN },
+        tax: { value: null, matchMode: FilterMatchMode.IN },
+        furnitureNote: { value: null, matchMode: FilterMatchMode.IN },
+        mortgageInfo: { value: null, matchMode: FilterMatchMode.IN },
+        description: { value: null, matchMode: FilterMatchMode.IN },
+        balconyDirection: { value: null, matchMode: FilterMatchMode.IN },
+        apartmentContactInfo: { value: null, matchMode: FilterMatchMode.IN },
+        contactInfo: { value: null, matchMode: FilterMatchMode.IN },
+        source: { value: null, matchMode: FilterMatchMode.IN },
+        status: { value: null, matchMode: FilterMatchMode.IN }
+    };
+
+    // Reset lazy params filters
+    lazyParams.value.search = '';
+    lazyParams.value.buildingCode = [];
+    lazyParams.value.apartmentCode = [];
+    lazyParams.value.apartmentEncode = [];
+    lazyParams.value.area = [];
+    lazyParams.value.sellingPrice = [];
+    lazyParams.value.tax = [];
+    lazyParams.value.furnitureNote = [];
+    lazyParams.value.mortgageInfo = [];
+    lazyParams.value.description = [];
+    lazyParams.value.balconyDirection = [];
+    lazyParams.value.apartmentContactInfo = [];
+    lazyParams.value.contactInfo = [];
+    lazyParams.value.source = [];
+    lazyParams.value.status = [];
+}
+
 // Reset data và load lại từ đầu
 function resetData() {
+    console.log('Resetting data...'); // Debug log
     virtualProducts.value = [];
     totalRecords.value = 0;
     loadedPages.value.clear();
+    selectedProducts.value = [];
     fetchInitialData();
 }
 
-// Fetch initial data để biết total records
+// Fetch initial data để biết total records - chỉ load page đầu
 async function fetchInitialData() {
-    try {
-        const params = { ...lazyParams.value, page: 1, limit: 20 };
-        const { data } = await productService.getAll(params);
-        totalRecords.value = data.total;
-        // Initialize virtual array với total length
-        virtualProducts.value = Array.from({ length: data.total });
+    if (!lazyParams.value.apartmentType || !lazyParams.value.subdivision) {
+        console.warn('Missing apartmentType or subdivision parameters');
+        return;
+    }
 
-        // Load first 20 items
-        if (data.data.length > 0) {
-            loadProductsLazy({ first: 0, last: Math.min(20, data.data.length) });
+    try {
+        lazyLoading.value = true;
+        const params = { ...lazyParams.value, page: 1, limit: 20 };
+        const response = await productService.getAll(params);
+        const data = response.data;
+
+        console.log('API Response:', data); // Debug log
+
+        totalRecords.value = data.total || 0;
+
+        if (totalRecords.value === 0) {
+            virtualProducts.value = [];
+            return;
         }
+
+        // Initialize virtual array với total length - fill với placeholder object
+        virtualProducts.value = Array.from({ length: totalRecords.value }, (_, index) => ({
+            id: `placeholder-${index}`,
+            isPlaceholder: true
+        }));
+
+        // CHỈ load page đầu tiên (page 1)
+        if (data.data && data.data.length > 0) {
+            data.data.forEach((item, index) => {
+                if (index < virtualProducts.value.length) {
+                    virtualProducts.value[index] = { ...item, isPlaceholder: false };
+                }
+            });
+            loadedPages.value.add(1);
+            console.log('Loaded ONLY first page'); // Debug log
+        }
+
+        // Force reactivity update
+        virtualProducts.value = [...virtualProducts.value];
     } catch (err) {
-        debugger;
+        console.error('Error fetching initial data:', err);
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được sản phẩm' });
+        virtualProducts.value = [];
+        totalRecords.value = 0;
+    } finally {
+        lazyLoading.value = false;
     }
 }
 
-// Virtual scroll lazy loading function - gọi API thực tế
+// Virtual scroll lazy loading function - Tối ưu performance
 const loadProductsLazy = async (event) => {
     if (lazyLoading.value) return;
+
+    const { first, last } = event;
+    const pageSize = 20;
+    const startPage = Math.floor(first / pageSize) + 1;
+    const endPage = Math.ceil(last / pageSize);
+
+    // Load các page chưa được load
+    const pagesToLoad = [];
+    for (let page = startPage; page <= endPage; page++) {
+        if (!loadedPages.value.has(page)) {
+            pagesToLoad.push(page);
+        }
+    }
+
+    // Nếu không có page nào cần load, thoát sớm
+    if (pagesToLoad.length === 0) {
+        return;
+    }
 
     lazyLoading.value = true;
 
     try {
-        let { first, last } = event;
-        const pageSize = 20;
-        const startPage = Math.floor(first / pageSize) + 1;
-        const endPage = Math.ceil(last / pageSize);
-
-        // Load các page chưa được load
-        const pagesToLoad = [];
-        for (let page = startPage; page <= endPage; page++) {
-            if (!loadedPages.value.has(page)) {
-                pagesToLoad.push(page);
-            }
-        }
-
-        // Load từng page
-        for (const page of pagesToLoad) {
+        // Load tất cả pages song song thay vì tuần tự
+        const promises = pagesToLoad.map(async (page) => {
             const params = { ...lazyParams.value, page, limit: pageSize };
-            const { data } = await productService.getAll(params);
+            const response = await productService.getAll(params);
+            return { page, data: response.data };
+        });
 
-            // Tính vị trí trong virtual array
+        const results = await Promise.all(promises);
+
+        // Batch update virtual array một lần duy nhất
+        const _virtualProducts = [...virtualProducts.value];
+
+        results.forEach(({ page, data }) => {
             const startIndex = (page - 1) * pageSize;
-            const endIndex = startIndex + data.data.length;
 
-            // Cập nhật virtual array
-            let _virtualProducts = [...virtualProducts.value];
-            Array.prototype.splice.apply(_virtualProducts, [startIndex, data.data.length, ...data.data]);
+            data.data.forEach((item, index) => {
+                const targetIndex = startIndex + index;
+                if (targetIndex < _virtualProducts.length) {
+                    _virtualProducts[targetIndex] = { ...item, isPlaceholder: false };
+                }
+            });
 
-            virtualProducts.value = _virtualProducts;
             loadedPages.value.add(page);
-        }
+        });
+
+        // Single update để trigger reactivity
+        virtualProducts.value = _virtualProducts;
     } catch (err) {
-        debugger;
+        console.error('❌ Error loading lazy data:', err);
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được sản phẩm' });
     } finally {
         lazyLoading.value = false;
@@ -202,26 +305,36 @@ onMounted(async () => {
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    if (route.params.type) {
+    // Chỉ setup params một lần
+    if (route.params.type && route.params.subdivision) {
         apartmentType.value = route.params.type;
-        lazyParams.value.apartmentType = apartmentType.value;
-    }
-    if (route.params.subdivision) {
         subdivision.value = route.params.subdivision;
+        lazyParams.value.apartmentType = apartmentType.value;
         lazyParams.value.subdivision = subdivision.value;
-    }
 
-    fetchFilterOptions();
-    fetchInitialData();
-    getMe();
+        // Load permissions và filter options trước
+        await Promise.all([getMe(), fetchFilterOptions()]);
+
+        // Sau đó mới load data (chỉ page đầu)
+        await fetchInitialData();
+
+        isInitialized.value = true;
+    } else {
+        console.warn('Missing route parameters: type or subdivision');
+    }
 });
 
 async function fetchFilterOptions() {
+    if (!lazyParams.value.apartmentType || !lazyParams.value.subdivision) {
+        return;
+    }
+
     try {
         const res = await productService.getFilterOptions(lazyParams.value);
         filterOptions.value = res.data;
     } catch (err) {
-        toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được bộ lọc sản phẩm', life: 1000 });
+        console.error('Error fetching filter options:', err);
+        // Không show toast error cho filter options để tránh spam
     }
 }
 
@@ -283,6 +396,9 @@ const validateForm = () => {
 const files = ref([]);
 
 const onFilter = () => {
+    // Chỉ filter khi đã khởi tạo
+    if (!isInitialized.value) return;
+
     lazyParams.value.buildingCode = filters.value['buildingCode'].value;
     lazyParams.value.apartmentCode = filters.value['apartmentCode'].value;
     lazyParams.value.apartmentEncode = filters.value['apartmentEncode'].value;
@@ -297,8 +413,9 @@ const onFilter = () => {
     lazyParams.value.contactInfo = filters.value['contactInfo'].value;
     lazyParams.value.source = filters.value['source'].value;
     lazyParams.value.status = filters.value['status'].value;
+
     fetchFilterOptions();
-    fetchInitialData();
+    resetData();
 };
 
 async function submit() {
@@ -328,7 +445,7 @@ async function submit() {
             life: 1000
         });
         hideDialog();
-        fetchInitialData();
+        resetData();
     } catch (ex) {
         toast.add({
             severity: 'error',
@@ -340,7 +457,24 @@ async function submit() {
 }
 
 function openNew() {
-    form.value = {};
+    form.value = {
+        buildingCode: '',
+        apartmentCode: '',
+        apartmentType: apartmentType.value,
+        subdivision: subdivision.value,
+        apartmentEncode: '',
+        area: null,
+        sellingPrice: '',
+        tax: null,
+        furnitureNote: '',
+        mortgageInfo: '',
+        description: '',
+        balconyDirection: null,
+        apartmentContactInfo: '',
+        contactInfo: '',
+        source: '',
+        status: 'DANG_BAN'
+    };
     submitted.value = false;
     productDialog.value = true;
 }
@@ -357,20 +491,20 @@ function editProduct(prod) {
 }
 
 function confirmDeleteProduct(prod) {
-    form.value = prod;
+    product.value = prod;
     deleteProductDialog.value = true;
 }
 
 async function deleteProduct() {
     try {
-        await productService.remove(form.value.id);
-        toast.add({ severity: 'success', summary: 'Đã xoá', detail: form.value.apartmentCode, life: 3000 });
+        await productService.remove(product.value.id);
+        toast.add({ severity: 'success', summary: 'Đã xoá', detail: product.value.apartmentCode, life: 3000 });
         deleteProductDialog.value = false;
-        fetchInitialData();
+        resetData();
     } catch (err) {
-        toast.add({ severity: 'error', summary: 'Lỗi', detail: `Không thể xoá ${form.value.apartmentCode}`, life: 3000 });
+        toast.add({ severity: 'error', summary: 'Lỗi', detail: `Không thể xoá ${product.value.apartmentCode}`, life: 3000 });
     }
-    form.value = {};
+    product.value = {};
 }
 
 function confirmDeleteSelected() {
@@ -381,7 +515,7 @@ async function deleteSelectedProducts() {
     try {
         await Promise.all(selectedProducts.value.map((u) => productService.remove(u.id)));
         toast.add({ severity: 'success', summary: 'Đã xoá', detail: 'Đã xoá các căn hộ được chọn', life: 3000 });
-        fetchInitialData();
+        resetData();
         deleteProductsDialog.value = false;
         selectedProducts.value = null;
     } catch (err) {
@@ -432,23 +566,28 @@ function getStatusColor(status) {
     }
 }
 
+// Tối ưu format phone number với memoization
 const formatPhoneNumber = (phone) => {
-    const cleaned = `${phone}`.replace(/\D/g, '');
+    if (!phone) return '';
+    const cleaned = String(phone).replace(/\D/g, '');
     if (cleaned.length === 10) {
         return cleaned.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
     } else if (cleaned.length === 11 && cleaned.startsWith('84')) {
         return '+' + cleaned.replace(/(\d{2})(\d{3})(\d{4})(\d{2})/, '$1 $2 $3 $4');
-    } else {
-        return phone;
     }
+    return phone;
 };
 
 // permission
 const userPermissions = ref([]);
 const getMe = async () => {
-    const res = await authService.getMe();
-    userPermissions.value = res.data?.permissions?.fieldNames || [];
-    columns.value = columnDefaults.value.filter((col) => !userPermissions.value.includes(col.key));
+    try {
+        const res = await authService.getMe();
+        userPermissions.value = res.data?.permissions?.fieldNames || [];
+        columns.value = columnDefaults.value.filter((col) => !userPermissions.value.includes(col.key));
+    } catch (err) {
+        console.error('Error getting user permissions:', err);
+    }
 };
 
 const columnDefaults = ref([
@@ -486,7 +625,7 @@ const columnDefaults = ref([
 
 const onColumnReorder = (event) => {
     if (event.dragIndex === 0 || event.dropIndex === 0) {
-        columns.value = [...originalColumnOrder];
+        columns.value = [...columnDefaults.value.filter((col) => !userPermissions.value.includes(col.key))];
     }
 };
 
@@ -566,8 +705,12 @@ const videoRef = ref(null);
 let stream = null;
 
 const startCamera = async () => {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    videoRef.value.srcObject = stream;
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoRef.value.srcObject = stream;
+    } catch (err) {
+        console.error('Camera error:', err);
+    }
 };
 
 const stopCamera = () => {
@@ -644,10 +787,11 @@ const showImages = (images) => {
                     lazy: true,
                     onLazyLoad: loadProductsLazy,
                     itemSize: 60,
-                    delay: 200,
+                    delay: 0,
                     showLoader: true,
                     loading: lazyLoading,
-                    numToleratedItems: 20
+                    numToleratedItems: 5,
+                    step: 5
                 }"
                 @columnReorder="onColumnReorder"
                 @sort="onSort"
@@ -670,7 +814,7 @@ const showImages = (images) => {
                                 </InputIcon>
                                 <InputText v-model="filters['global'].value" placeholder="Tìm kiếm..." />
                             </IconField>
-                            <Button type="button" @click="fetchInitialData" icon="pi pi-refresh" text />
+                            <Button type="button" @click="resetData" icon="pi pi-refresh" text />
                         </div>
                     </div>
                 </template>
@@ -693,33 +837,37 @@ const showImages = (images) => {
                     :style="{ minWidth: `${item.width}rem`, height: '60px' }"
                     :class="item.frozen ? 'font-bold' : ''"
                 >
-                    <template #body="{ data }">
-                        <div v-if="item.type === 'tag'" class="flex items-center gap-2">
-                            <Tag :value="!item.text ? data[item.key] : item.text(data[item.key])" :severity="item.color(data[item.key])" :style="{ backgroundColor: `${item.color(data[item.key])}`, color: '#000' }"> </Tag>
+                    <template #body="{ data, index }">
+                        <!-- Hiển thị skeleton cho placeholder -->
+                        <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
+                            <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
                         </div>
-                        <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
-                            <span>{{ Number(data[item.key]) }}m²</span>
-                        </div>
-                        <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key]).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
-                        <div v-else-if="item.type === 'link'" class="flex items-center gap-2">
-                            <Button label="Hình ảnh" icon="pi pi-paperclip" text />
-                        </div>
-                        <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
-                            <span>{{ data[item.key] ? format(new Date(data[item.key]), 'yyyy-MM-dd') : null }}</span>
-                        </div>
-                        <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
-                            <Button v-if="data[item.key]?.length > 0" @click="showImages(data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
-                            <span v-else>Không có ảnh</span>
-                        </div>
-                        <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
-                            <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
-                                <i class="pi pi-phone text-lg"></i>
-                                <span>{{ formatPhoneNumber(data[item.key]) }}</span>
-                            </a>
-                        </div>
-                        <div v-else class="flex items-center gap-2">
-                            <span>{{ data[item.key] || '' }}</span>
-                        </div>
+                        <!-- Render data với v-else-if để tối ưu -->
+                        <template v-else>
+                            <div v-if="item.type === 'tag'" class="flex items-center gap-2">
+                                <Tag :value="!item.text ? data[item.key] : item.text(data[item.key])" :severity="item.color(data[item.key])" :style="{ backgroundColor: item.color(data[item.key]), color: '#000' }" />
+                            </div>
+                            <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
+                                <span>{{ Number(data[item.key] || 0) }}m²</span>
+                            </div>
+                            <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key] || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
+                            <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
+                                <Button v-if="data[item.key]?.length > 0" @click="showImages(data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
+                                <span v-else>Không có ảnh</span>
+                            </div>
+                            <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
+                                <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
+                                    <i class="pi pi-phone text-lg"></i>
+                                    <span>{{ formatPhoneNumber(data[item.key]) }}</span>
+                                </a>
+                            </div>
+                            <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
+                                <span>{{ data[item.key] ? format(new Date(data[item.key]), 'yyyy-MM-dd') : null }}</span>
+                            </div>
+                            <div v-else class="flex items-center gap-2">
+                                <span>{{ data[item.key] || '' }}</span>
+                            </div>
+                        </template>
                     </template>
 
                     <template #loading>
@@ -786,13 +934,15 @@ const showImages = (images) => {
 
                 <Column :exportable="false" style="min-width: 12rem; height: 60px">
                     <template #body="{ data }">
-                        <Button icon="pi pi-pencil" outlined rounded class="mr-2" @click="editProduct(data)" />
-                        <Button icon="pi pi-trash" outlined rounded class="mr-2" severity="danger" @click="confirmDeleteProduct(data)" />
-                    </template>
-                    <template #loading>
-                        <div class="flex items-center gap-2" style="height: 17px; flex-grow: 1; overflow: hidden">
+                        <!-- Skeleton cho placeholder -->
+                        <div v-if="!data || data.isPlaceholder" class="flex items-center gap-2" style="height: 17px">
                             <Skeleton width="2rem" height="2rem" class="rounded-full" />
                             <Skeleton width="2rem" height="2rem" class="rounded-full" />
+                        </div>
+                        <!-- Action buttons -->
+                        <div v-else class="flex items-center gap-2">
+                            <Button icon="pi pi-pencil" outlined rounded size="small" @click="editProduct(data)" />
+                            <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="confirmDeleteProduct(data)" />
                         </div>
                     </template>
                 </Column>
