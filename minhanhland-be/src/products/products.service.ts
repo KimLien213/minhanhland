@@ -27,7 +27,7 @@ export class ProductService {
     private readonly userSortPreferencesService: UserSortPreferencesService,
     private readonly productGateway: ProductGateway,
   ) { }
-
+  // Sửa trong ProductService - chỉ các phần create, update, remove
   async create(dto: CreateProductDto, files: Express.Multer.File[]) {
     const apartmentTypeEntity = await this.masterDataRepo.findOne({
       where: { id: dto.apartmentType },
@@ -35,31 +35,41 @@ export class ProductService {
     const subdivisionEntity = await this.masterDataRepo.findOne({
       where: { id: dto.subdivision },
     });
+
     const product = this.productRepo.create({
       ...dto,
       apartmentType: apartmentTypeEntity,
       subdivision: subdivisionEntity,
     });
+
     if (files?.length) {
       product.imageList = files.map((f) =>
         this.imageRepo.create({ url: `/uploads/products/${f.filename}` }),
       );
     }
-    
+
     const savedProduct = await this.productRepo.save(product);
-    
+
     // Load full product with relations for notification
     const fullProduct = await this.productRepo.findOne({
       where: { id: savedProduct.id },
       relations: ['imageList', 'apartmentType', 'subdivision'],
     });
 
-    // Emit WebSocket notification
-    this.productGateway.notifyProductCreated(
-      fullProduct,
-      dto.subdivision,
-      dto.apartmentType,
-    );
+    // Emit WebSocket notification with error handling
+    try {
+      console.log(`🔔 Sending product created notification for: ${fullProduct.apartmentCode}`);
+      console.log(`   Subdivision ID: ${dto.subdivision}, ApartmentType ID: ${dto.apartmentType}`);
+
+      // Pass the IDs, not the full objects
+      this.productGateway.notifyProductCreated(
+        fullProduct,
+        dto.subdivision, // This is the ID string
+        dto.apartmentType, // This is the ID string
+      );
+    } catch (error) {
+      console.error('❌ Error sending WebSocket notification:', error);
+    }
 
     return fullProduct;
   }
@@ -71,12 +81,18 @@ export class ProductService {
   ) {
     const product = await this.productRepo.findOne({
       where: { id },
-      relations: ['imageList'],
+      relations: ['imageList', 'apartmentType', 'subdivision'],
     });
+
     if (!product) throw new Error('Product not found');
-    
+
+    // Store original subdivision and apartmentType IDs for notification
+    const originalSubdivision = product.subdivision.id;
+    const originalApartmentType = product.apartmentType.id;
+
     Object.assign(product, dto);
     product.imageList = [];
+
     if (dto.imageIds?.length) {
       const images = await this.imageRepo.find({
         where: {
@@ -92,19 +108,30 @@ export class ProductService {
       );
       product.imageList = (product.imageList || []).concat(newFiles);
     }
+
     const updatedProduct = await this.productRepo.save(product);
-     // Load full product with relations for notification
+
+    // Load full product with relations for notification
     const fullProduct = await this.productRepo.findOne({
       where: { id: updatedProduct.id },
       relations: ['imageList', 'apartmentType', 'subdivision'],
     });
 
-    // Emit WebSocket notification
-    this.productGateway.notifyProductUpdated(
-      fullProduct,
-      fullProduct.subdivision.id,
-      fullProduct.apartmentType.id,
-    );
+    // Emit WebSocket notification with error handling
+    try {
+      console.log(`🔔 Sending product updated notification for: ${fullProduct.apartmentCode}`);
+      console.log(`   Subdivision ID: ${originalSubdivision}, ApartmentType ID: ${originalApartmentType}`);
+
+      // Pass the IDs, not the full objects
+      this.productGateway.notifyProductUpdated(
+        fullProduct,
+        originalSubdivision, // This is the ID string
+        originalApartmentType, // This is the ID string
+      );
+    } catch (error) {
+      console.error('❌ Error sending WebSocket notification:', error);
+    }
+
     return updatedProduct;
   }
 
@@ -113,25 +140,35 @@ export class ProductService {
       where: { id },
       relations: ['imageList', 'apartmentType', 'subdivision'],
     });
-    
+
     if (!product) throw new Error('Product not found');
-    
+
+    // Store the IDs for notification
     const subdivision = product.subdivision.id;
     const apartmentType = product.apartmentType.id;
-    
+    const apartmentCode = product.apartmentCode;
+
     if (product?.imageList?.length) {
       for (const img of product.imageList) {
         const filepath = path.join('./', img.url);
         if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
       }
     }
-    
+
     await this.imageRepo.delete({ product: { id } });
     const result = await this.productRepo.delete(id);
-    
-    // Emit WebSocket notification
-    this.productGateway.notifyProductDeleted(id, subdivision, apartmentType);
-    
+
+    // Emit WebSocket notification with error handling
+    try {
+      console.log(`🔔 Sending product deleted notification for: ${apartmentCode}`);
+      console.log(`   Subdivision ID: ${subdivision}, ApartmentType ID: ${apartmentType}`);
+
+      // Pass the IDs, not the full objects
+      this.productGateway.notifyProductDeleted(id, subdivision, apartmentType);
+    } catch (error) {
+      console.error('❌ Error sending WebSocket notification:', error);
+    }
+
     return result;
   }
 
@@ -216,7 +253,7 @@ export class ProductService {
     builder.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await builder.getManyAndCount();
-    
+
     // Include current sort info in response
     const currentSort = query.sortBy ? {
       sortBy: query.sortBy,

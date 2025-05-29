@@ -12,28 +12,38 @@ class SocketService {
     this.maxReconnectDelay = 30000; // Max 30 seconds
     this.reconnectTimer = null;
     this.isManualDisconnect = false;
+    this.isConnecting = false;
   }
 
   connect() {
-    if (this.socket?.connected) return;
+    if (this.socket?.connected || this.isConnecting) {
+      console.log('Socket already connected or connecting');
+      return this.socket;
+    }
 
+    this.isConnecting = true;
     this.isManualDisconnect = false;
+
+    // Create socket with correct configuration
     this.socket = io(`${import.meta.env.VITE_API_URL}/products`, {
-      transports: ['websocket'],
-      autoConnect: false,
+      transports: ['websocket', 'polling'], // Allow both transports
+      autoConnect: true,
       reconnection: false, // We'll handle reconnection manually
       timeout: 20000,
+      forceNew: true, // Force new connection
     });
 
     this.setupSocketEvents();
-    this.socket.connect();
 
     return this.socket;
   }
 
   setupSocketEvents() {
+    if (!this.socket) return;
+
     this.socket.on('connect', () => {
       console.log('🔌 Socket connected:', this.socket.id);
+      this.isConnecting = false;
       this.reconnectAttempts = 0;
       this.reconnectDelay = 1000; // Reset delay
 
@@ -52,19 +62,34 @@ class SocketService {
 
     this.socket.on('disconnect', (reason) => {
       console.log('🔌 Socket disconnected:', reason);
+      this.isConnecting = false;
 
       // Only attempt reconnection if it wasn't a manual disconnect
-      if (!this.isManualDisconnect) {
+      if (!this.isManualDisconnect && reason !== 'io client disconnect') {
         this.scheduleReconnect();
       }
     });
 
     this.socket.on('connect_error', (error) => {
       console.error('🔌 Socket connection error:', error);
+      this.isConnecting = false;
 
       if (!this.isManualDisconnect) {
         this.scheduleReconnect();
       }
+    });
+
+    // Add debug events
+    this.socket.on('product-created', (data) => {
+      console.log('🔥 Received product-created event:', data);
+    });
+
+    this.socket.on('product-updated', (data) => {
+      console.log('🔥 Received product-updated event:', data);
+    });
+
+    this.socket.on('product-deleted', (data) => {
+      console.log('🔥 Received product-deleted event:', data);
     });
   }
 
@@ -85,7 +110,7 @@ class SocketService {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
 
-      if (!this.isManualDisconnect && !this.socket?.connected) {
+      if (!this.isManualDisconnect && !this.socket?.connected && !this.isConnecting) {
         console.log(`🔌 Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
         this.socket?.connect();
 
@@ -100,6 +125,7 @@ class SocketService {
 
   disconnect() {
     this.isManualDisconnect = true;
+    this.isConnecting = false;
 
     // Clear reconnect timer
     if (this.reconnectTimer) {
@@ -128,10 +154,12 @@ class SocketService {
       return;
     }
 
-    this.socket.emit('join-product-room', {
-      subdivision,
-      apartmentType,
-    });
+    const roomData = {
+      subdivision: String(subdivision),
+      apartmentType: String(apartmentType),
+    };
+
+    this.socket.emit('join-product-room', roomData);
 
     this.currentRoom = { subdivision, apartmentType };
     console.log(`🏠 Joined product room: ${subdivision}-${apartmentType}`);
@@ -143,10 +171,12 @@ class SocketService {
       return;
     }
 
-    this.socket.emit('leave-product-room', {
-      subdivision,
-      apartmentType,
-    });
+    const roomData = {
+      subdivision: String(subdivision),
+      apartmentType: String(apartmentType),
+    };
+
+    this.socket.emit('leave-product-room', roomData);
 
     this.currentRoom = null;
     console.log(`🏠 Left product room: ${subdivision}-${apartmentType}`);
@@ -172,18 +202,24 @@ class SocketService {
       return () => { };
     }
 
-    this.socket.on(event, callback);
+    // Wrap callback to add debugging
+    const wrappedCallback = (data) => {
+      console.log(`📨 Socket event received: ${event}`, data);
+      callback(data);
+    };
+
+    this.socket.on(event, wrappedCallback);
 
     // Store listener for cleanup
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event).add(callback);
+    this.listeners.get(event).add(wrappedCallback);
 
     // Return cleanup function
     return () => {
-      this.socket?.off(event, callback);
-      this.listeners.get(event)?.delete(callback);
+      this.socket?.off(event, wrappedCallback);
+      this.listeners.get(event)?.delete(wrappedCallback);
     };
   }
 
@@ -210,6 +246,7 @@ class SocketService {
       maxReconnectAttempts: this.maxReconnectAttempts,
       currentRoom: this.currentRoom,
       nextReconnectDelay: this.reconnectDelay,
+      isConnecting: this.isConnecting,
     };
   }
 
@@ -230,7 +267,13 @@ class SocketService {
       this.reconnectTimer = null;
     }
 
-    this.socket?.connect();
+    // If socket exists but disconnected, reconnect
+    if (this.socket && !this.socket.connected) {
+      this.socket.connect();
+    } else {
+      // Create new connection
+      this.connect();
+    }
   }
 }
 

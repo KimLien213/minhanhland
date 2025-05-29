@@ -40,6 +40,9 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
     const roomName = `${data.subdivision}-${data.apartmentType}`;
     client.join(roomName);
     this.logger.log(`Client ${client.id} joined room: ${roomName}`);
+    
+    // Confirm join to client
+    client.emit('room-joined', { room: roomName });
   }
 
   @SubscribeMessage('leave-product-room')
@@ -50,38 +53,86 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
     const roomName = `${data.subdivision}-${data.apartmentType}`;
     client.leave(roomName);
     this.logger.log(`Client ${client.id} left room: ${roomName}`);
+    
+    // Confirm leave to client
+    client.emit('room-left', { room: roomName });
+  }
+
+  // Helper method to get room info
+  getRoomInfo(): any {
+    const rooms = this.server.sockets.adapter.rooms;
+    const roomInfo = {};
+    
+    rooms.forEach((sockets, roomName) => {
+      if (!roomName.startsWith('/')) { // Skip socket ID rooms
+        roomInfo[roomName] = sockets.size;
+      }
+    });
+    
+    return roomInfo;
   }
 
   // Emit product created event
   notifyProductCreated(product: any, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
-    this.server.to(roomName).emit('product-created', {
+    
+    const payload = {
       type: 'PRODUCT_CREATED',
       data: product,
       timestamp: new Date().toISOString(),
-    });
-    this.logger.log(`Product created notification sent to room: ${roomName}`);
+    };
+
+    // Emit to specific room
+    this.server.to(roomName).emit('product-created', payload);
+    
+    // Also emit to all connected clients as fallback
+    this.server.emit('product-created', payload);
+    
+    this.logger.log(`Product created notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
+    this.logger.debug('Room info:', this.getRoomInfo());
   }
 
   // Emit product updated event
   notifyProductUpdated(product: any, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
-    this.server.to(roomName).emit('product-updated', {
+    
+    const payload = {
       type: 'PRODUCT_UPDATED',
       data: product,
       timestamp: new Date().toISOString(),
-    });
-    this.logger.log(`Product updated notification sent to room: ${roomName}`);
+    };
+
+    // Emit to specific room
+    this.server.to(roomName).emit('product-updated', payload);
+    
+    // Also emit to all connected clients as fallback
+    this.server.emit('product-updated', payload);
+    
+    this.logger.log(`Product updated notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
   }
 
   // Emit product deleted event
   notifyProductDeleted(productId: string, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
-    this.server.to(roomName).emit('product-deleted', {
+    
+    const payload = {
       type: 'PRODUCT_DELETED',
       data: { id: productId },
       timestamp: new Date().toISOString(),
-    });
-    this.logger.log(`Product deleted notification sent to room: ${roomName}`);
+    };
+
+    // Emit to specific room
+    this.server.to(roomName).emit('product-deleted', payload);
+    
+    // Also emit to all connected clients as fallback
+    this.server.emit('product-deleted', payload);
+    
+    this.logger.log(`Product deleted notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
+  }
+
+  // Debug method to broadcast to all clients
+  broadcastToAll(event: string, data: any) {
+    this.server.emit(event, data);
+    this.logger.log(`Broadcasted ${event} to all ${this.server.sockets.sockets.size} connected clients`);
   }
 }

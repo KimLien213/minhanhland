@@ -121,29 +121,41 @@ watch(
         updateSocketRoom();
     }
 );
-// Socket functions
+// Socket functions - Fixed version
 const initializeSocket = () => {
     try {
+        console.log('🚀 Initializing socket connection...');
         socketService.connect();
 
-        // Join the product room
-        if (subdivision.value && apartmentType.value) {
-            socketService.joinProductRoom(subdivision.value, apartmentType.value);
-        }
+        // Wait for connection before joining room
+        setTimeout(() => {
+            if (subdivision.value && apartmentType.value) {
+                console.log(`🏠 Joining room: ${subdivision.value}-${apartmentType.value}`);
+                socketService.joinProductRoom(subdivision.value, apartmentType.value);
+            }
 
-        // Setup event listeners
-        setupSocketListeners();
+            // Setup event listeners after connection
+            setupSocketListeners();
+        }, 1000);
     } catch (error) {
         console.error('Failed to initialize socket:', error);
     }
 };
 
 const updateSocketRoom = () => {
-    if (!socketService.isConnected()) return;
+    if (!socketService.isConnected()) {
+        console.log('Socket not connected, will join room when connected');
+        return;
+    }
 
     // Leave old room and join new room
-    socketService.leaveProductRoom(subdivision.value, apartmentType.value);
+    if (socketService.currentRoom) {
+        const { subdivision: oldSub, apartmentType: oldType } = socketService.currentRoom;
+        socketService.leaveProductRoom(oldSub, oldType);
+    }
+
     if (subdivision.value && apartmentType.value) {
+        console.log(`🏠 Switching to room: ${subdivision.value}-${apartmentType.value}`);
         socketService.joinProductRoom(subdivision.value, apartmentType.value);
     }
 };
@@ -152,33 +164,56 @@ const setupSocketListeners = () => {
     // Clean up existing listeners
     cleanupSocket();
 
+    console.log('🎧 Setting up socket listeners...');
+
     // Product created
     const cleanupCreated = socketService.onProductCreated((event) => {
-        console.log('Product created:', event);
-        handleProductCreated(event.data);
-        toast.add({
-            severity: 'info',
-            summary: 'Sản phẩm mới',
-            detail: `Căn hộ ${event.data.apartmentCode} vừa được thêm`,
-            life: 3000
-        });
+        console.log('📦 Product created received:', event);
+        console.log('📦 Event data subdivision:', event.data?.subdivision);
+        console.log('📦 Event data apartmentType:', event.data?.apartmentType);
+        console.log('📦 Current route params:', { subdivision: subdivision.value, apartmentType: apartmentType.value });
+
+        // Check if this event is for current room
+        if (isEventForCurrentRoom(event.data)) {
+            console.log('✅ Event is for current room, updating UI');
+            handleProductCreated(event.data);
+            toast.add({
+                severity: 'info',
+                summary: 'Sản phẩm mới',
+                detail: `Căn hộ ${event.data.apartmentCode} vừa được thêm`,
+                life: 3000
+            });
+        } else {
+            console.log('❌ Event is not for current room, ignoring');
+        }
     });
 
     // Product updated
     const cleanupUpdated = socketService.onProductUpdated((event) => {
-        console.log('Product updated:', event);
-        handleProductUpdated(event.data);
-        toast.add({
-            severity: 'info',
-            summary: 'Cập nhật sản phẩm',
-            detail: `Căn hộ ${event.data.apartmentCode} vừa được cập nhật`,
-            life: 3000
-        });
+        console.log('📝 Product updated received:', event);
+        console.log('📝 Event data subdivision:', event.data?.subdivision);
+        console.log('📝 Event data apartmentType:', event.data?.apartmentType);
+        console.log('📝 Current route params:', { subdivision: subdivision.value, apartmentType: apartmentType.value });
+
+        if (isEventForCurrentRoom(event.data)) {
+            console.log('✅ Event is for current room, updating UI');
+            handleProductUpdated(event.data);
+            toast.add({
+                severity: 'info',
+                summary: 'Cập nhật sản phẩm',
+                detail: `Căn hộ ${event.data.apartmentCode} vừa được cập nhật`,
+                life: 3000
+            });
+        } else {
+            console.log('❌ Event is not for current room, ignoring');
+        }
     });
 
     // Product deleted
     const cleanupDeleted = socketService.onProductDeleted((event) => {
-        console.log('Product deleted:', event);
+        console.log('🗑️ Product deleted received:', event);
+
+        // For delete events, we don't need to check room since we only have the ID
         handleProductDeleted(event.data.id);
         toast.add({
             severity: 'warn',
@@ -190,60 +225,138 @@ const setupSocketListeners = () => {
 
     // Store cleanup functions
     socketCleanups.value = [cleanupCreated, cleanupUpdated, cleanupDeleted];
+
+    console.log('✅ Socket listeners setup complete');
+};
+
+// Helper function to check if event is for current room
+const isEventForCurrentRoom = (productData) => {
+    if (!productData) {
+        return false;
+    }
+
+    // Handle both cases: when productData has subdivision/apartmentType as objects or when they're IDs
+    const productSubdivision = productData.subdivision?.id || productData.subdivision;
+    const productApartmentType = productData.apartmentType?.id || productData.apartmentType;
+
+    return productSubdivision === subdivision.value && productApartmentType === apartmentType.value;
 };
 
 const cleanupSocket = () => {
+    console.log('🧹 Cleaning up socket...');
+
     // Clean up listeners
     socketCleanups.value.forEach((cleanup) => cleanup());
     socketCleanups.value = [];
-
-    // Leave room and disconnect
-    if (socketService.isConnected()) {
-        socketService.leaveProductRoom(subdivision.value, apartmentType.value);
-        socketService.disconnect();
-    }
 };
 
-// Handle real-time updates
+// Handle real-time updates - Enhanced version
 const handleProductCreated = (newProduct) => {
-    // Add to virtual products array
-    virtualProducts.value = [newProduct, ...virtualProducts.value];
+    console.log('➕ Handling product created:', newProduct);
+
+    // Add to virtual products array at the beginning
+    const updatedProducts = [newProduct, ...virtualProducts.value.filter((p) => !p.isPlaceholder)];
+
+    // Update total records
     totalRecords.value += 1;
+
+    // Recreate virtual array with new total
+    virtualProducts.value = Array.from({ length: totalRecords.value }, (_, index) => {
+        if (index < updatedProducts.length) {
+            return { ...updatedProducts[index], isPlaceholder: false };
+        }
+        return {
+            id: `placeholder-${index}`,
+            isPlaceholder: true
+        };
+    });
 
     // Clear loaded pages cache to force reload
     loadedPages.value.clear();
+    loadedPages.value.add(1); // Mark first page as loaded
 
-    // Update filter options if needed
-    fetchFilterOptions();
+    // Update filter options
+    nextTick(() => {
+        fetchFilterOptions();
+    });
 };
 
 const handleProductUpdated = (updatedProduct) => {
+    console.log('✏️ Handling product updated:', updatedProduct);
+
     // Find and update in virtual products array
     const index = virtualProducts.value.findIndex((p) => p?.id === updatedProduct.id);
     if (index !== -1) {
-        virtualProducts.value[index] = updatedProduct;
+        virtualProducts.value[index] = { ...updatedProduct };
         // Trigger reactivity
         virtualProducts.value = [...virtualProducts.value];
+
+        console.log(`Updated product at index ${index}`);
+    } else {
+        console.log('Product not found in current view, might be in different page');
     }
 
-    // Update filter options if needed
-    fetchFilterOptions();
+    // Update filter options
+    nextTick(() => {
+        fetchFilterOptions();
+    });
 };
 
 const handleProductDeleted = (productId) => {
-    // Remove from virtual products array
+    console.log('🗑️ Handling product deleted:', productId);
+
+    // Find and remove from virtual products array
     const index = virtualProducts.value.findIndex((p) => p?.id === productId);
     if (index !== -1) {
-        virtualProducts.value.splice(index, 1);
-        totalRecords.value -= 1;
+        // Remove from array
+        const filteredProducts = virtualProducts.value.filter((p) => p?.id !== productId && !p.isPlaceholder);
+
+        // Update total records
+        totalRecords.value = Math.max(0, totalRecords.value - 1);
+
+        // Recreate virtual array
+        virtualProducts.value = Array.from({ length: totalRecords.value }, (_, index) => {
+            if (index < filteredProducts.length) {
+                return { ...filteredProducts[index], isPlaceholder: false };
+            }
+            return {
+                id: `placeholder-${index}`,
+                isPlaceholder: true
+            };
+        });
 
         // Clear loaded pages cache
         loadedPages.value.clear();
+        if (totalRecords.value > 0) {
+            loadedPages.value.add(1);
+        }
 
-        // Update filter options
-        fetchFilterOptions();
+        console.log(`Removed product at index ${index}, new total: ${totalRecords.value}`);
     }
+
+    // Update filter options
+    nextTick(() => {
+        fetchFilterOptions();
+    });
 };
+
+// Enhanced cleanup in onBeforeUnmount
+onBeforeUnmount(() => {
+    console.log('🧹 Component unmounting, cleaning up socket...');
+
+    window.removeEventListener('resize', handleResize);
+
+    // Clean up socket
+    cleanupSocket();
+
+    // Disconnect socket
+    if (socketService.isConnected()) {
+        if (subdivision.value && apartmentType.value) {
+            socketService.leaveProductRoom(subdivision.value, apartmentType.value);
+        }
+        socketService.disconnect();
+    }
+});
 function onSort(event) {
     const newSortBy = event.sortField;
     const newSortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
