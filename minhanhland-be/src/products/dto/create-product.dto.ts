@@ -8,6 +8,9 @@ export class CreateProductDto {
   @IsString()
   apartmentType: string;
 
+  @IsString()
+  subdivision: string;
+
   @Type(() => Number)
   @IsNumber()
   area: number;

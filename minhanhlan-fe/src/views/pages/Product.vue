@@ -2,14 +2,15 @@
 import FullscreenImageGallery from '@/components/galeria/FullscreenImageGallery.vue';
 import { authService } from '@/service/AuthService';
 import { productService } from '@/service/ProductService';
+import { socketService } from '@/service/SocketService';
+import { sortPreferencesService } from '@/service/SortPreferencesService';
 import { FilterMatchMode } from '@primevue/core/api';
 import { format } from 'date-fns';
-import { usePrimeVue } from 'primevue/config';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-const $primevue = usePrimeVue();
+const socketCleanups = ref([]);
 const productDialog = ref(false);
 const deleteProductDialog = ref(false);
 const deleteProductsDialog = ref(false);
@@ -34,10 +35,10 @@ const virtualProducts = ref([]); // Virtual products cho DataTable
 const selectedProducts = ref([]);
 const totalRecords = ref(0);
 const lazyLoading = ref(false);
-const loadLazyTimeout = ref();
 const apartmentType = ref('');
 const subdivision = ref('');
 const loadedPages = ref(new Set()); // Track các page đã load
+const isAdmin = ref(false);
 
 // Parameters for API calls
 const lazyParams = ref({
@@ -117,12 +118,147 @@ watch(
                 resetData();
             }
         }
+        updateSocketRoom();
     }
 );
+// Socket functions
+const initializeSocket = () => {
+    try {
+        socketService.connect();
 
+        // Join the product room
+        if (subdivision.value && apartmentType.value) {
+            socketService.joinProductRoom(subdivision.value, apartmentType.value);
+        }
+
+        // Setup event listeners
+        setupSocketListeners();
+    } catch (error) {
+        console.error('Failed to initialize socket:', error);
+    }
+};
+
+const updateSocketRoom = () => {
+    if (!socketService.isConnected()) return;
+
+    // Leave old room and join new room
+    socketService.leaveProductRoom(subdivision.value, apartmentType.value);
+    if (subdivision.value && apartmentType.value) {
+        socketService.joinProductRoom(subdivision.value, apartmentType.value);
+    }
+};
+
+const setupSocketListeners = () => {
+    // Clean up existing listeners
+    cleanupSocket();
+
+    // Product created
+    const cleanupCreated = socketService.onProductCreated((event) => {
+        console.log('Product created:', event);
+        handleProductCreated(event.data);
+        toast.add({
+            severity: 'info',
+            summary: 'Sản phẩm mới',
+            detail: `Căn hộ ${event.data.apartmentCode} vừa được thêm`,
+            life: 3000
+        });
+    });
+
+    // Product updated
+    const cleanupUpdated = socketService.onProductUpdated((event) => {
+        console.log('Product updated:', event);
+        handleProductUpdated(event.data);
+        toast.add({
+            severity: 'info',
+            summary: 'Cập nhật sản phẩm',
+            detail: `Căn hộ ${event.data.apartmentCode} vừa được cập nhật`,
+            life: 3000
+        });
+    });
+
+    // Product deleted
+    const cleanupDeleted = socketService.onProductDeleted((event) => {
+        console.log('Product deleted:', event);
+        handleProductDeleted(event.data.id);
+        toast.add({
+            severity: 'warn',
+            summary: 'Xóa sản phẩm',
+            detail: `Một căn hộ vừa được xóa`,
+            life: 3000
+        });
+    });
+
+    // Store cleanup functions
+    socketCleanups.value = [cleanupCreated, cleanupUpdated, cleanupDeleted];
+};
+
+const cleanupSocket = () => {
+    // Clean up listeners
+    socketCleanups.value.forEach((cleanup) => cleanup());
+    socketCleanups.value = [];
+
+    // Leave room and disconnect
+    if (socketService.isConnected()) {
+        socketService.leaveProductRoom(subdivision.value, apartmentType.value);
+        socketService.disconnect();
+    }
+};
+
+// Handle real-time updates
+const handleProductCreated = (newProduct) => {
+    // Add to virtual products array
+    virtualProducts.value = [newProduct, ...virtualProducts.value];
+    totalRecords.value += 1;
+
+    // Clear loaded pages cache to force reload
+    loadedPages.value.clear();
+
+    // Update filter options if needed
+    fetchFilterOptions();
+};
+
+const handleProductUpdated = (updatedProduct) => {
+    // Find and update in virtual products array
+    const index = virtualProducts.value.findIndex((p) => p?.id === updatedProduct.id);
+    if (index !== -1) {
+        virtualProducts.value[index] = updatedProduct;
+        // Trigger reactivity
+        virtualProducts.value = [...virtualProducts.value];
+    }
+
+    // Update filter options if needed
+    fetchFilterOptions();
+};
+
+const handleProductDeleted = (productId) => {
+    // Remove from virtual products array
+    const index = virtualProducts.value.findIndex((p) => p?.id === productId);
+    if (index !== -1) {
+        virtualProducts.value.splice(index, 1);
+        totalRecords.value -= 1;
+
+        // Clear loaded pages cache
+        loadedPages.value.clear();
+
+        // Update filter options
+        fetchFilterOptions();
+    }
+};
 function onSort(event) {
-    lazyParams.value.sortBy = event.sortField;
-    lazyParams.value.sortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
+    const newSortBy = event.sortField;
+    const newSortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
+
+    // Update current sort
+    currentSort.value = {
+        sortBy: newSortBy,
+        sortOrder: newSortOrder
+    };
+
+    // Update lazy params
+    lazyParams.value.sortBy = newSortBy;
+    lazyParams.value.sortOrder = newSortOrder;
+
+    // Save preference (will be saved automatically by backend)
     resetData();
 }
 
@@ -187,9 +323,11 @@ async function fetchInitialData() {
         const response = await productService.getAll(params);
         const data = response.data;
 
-        console.log('API Response:', data); // Debug log
-
         totalRecords.value = data.total || 0;
+
+        if (data.currentSort) {
+            currentSort.value = data.currentSort;
+        }
 
         if (totalRecords.value === 0) {
             virtualProducts.value = [];
@@ -304,7 +442,9 @@ const filterOptions = ref({
 
 onMounted(async () => {
     handleResize();
+    initializeSocket();
     window.addEventListener('resize', handleResize);
+    isAdmin.value = authService.isAdmin();
 
     // Chỉ setup params một lần
     if (route.params.type && route.params.subdivision) {
@@ -313,6 +453,7 @@ onMounted(async () => {
         lazyParams.value.apartmentType = apartmentType.value;
         lazyParams.value.subdivision = subdivision.value;
 
+        await loadSortPreferences();
         // Load permissions và filter options trước
         await Promise.all([getMe(), fetchFilterOptions()]);
 
@@ -324,7 +465,21 @@ onMounted(async () => {
         console.warn('Missing route parameters: type or subdivision');
     }
 });
-
+const loadSortPreferences = async () => {
+    try {
+        const sortPreference = await sortPreferencesService.getSortPreference('products');
+        if (sortPreference && sortPreference.sortBy) {
+            currentSort.value = {
+                sortBy: sortPreference.sortBy,
+                sortOrder: sortPreference.sortOrder || 'DESC'
+            };
+            lazyParams.value.sortBy = sortPreference.sortBy;
+            lazyParams.value.sortOrder = sortPreference.sortOrder || 'DESC';
+        }
+    } catch (err) {
+        console.log('No saved sort preferences found');
+    }
+};
 async function fetchFilterOptions() {
     if (!lazyParams.value.apartmentType || !lazyParams.value.subdivision) {
         return;
@@ -389,7 +544,6 @@ const validateForm = () => {
     errors.apartmentCode = !form.value.apartmentCode ? 'Vui lòng nhập mã căn' : '';
     errors.area = !form.value.area ? 'Vui lòng nhập diện tích' : '';
     errors.sellingPrice = !form.value.sellingPrice ? 'Vui lòng nhập giá bán' : '';
-    errors.apartmentContactInfo = !form.value.apartmentContactInfo ? 'Vui lòng nhập SĐT chủ nhà' : '';
     errors.status = !form.value.status ? 'Vui lòng chọn tình trạng' : '';
     return Object.values(errors).every((e) => !e);
 };
@@ -594,8 +748,8 @@ const getMe = async () => {
 const columnDefaults = ref([
     { key: 'buildingCode', label: 'Mã tòa', frozen: true, mobileFrozen: false, width: 7, mobileWidth: 6, filterable: true, maxWidth: 8 },
     { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4, maxWidth: 8 },
-    { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: false, width: 5, mobileWidth: 4 },
-    { key: 'area', label: 'S', type: 's', width: 6.5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
+    { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4 },
+    { key: 'area', label: 'S', type: 's', width: 5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
     { key: 'sellingPrice', label: 'Giá bán', width: 5, maxWidth: 6.5 },
     { key: 'tax', label: 'Thuế phí', type: 'money', width: 6, maxWidth: 6 },
     { key: 'furnitureNote', label: 'Nội thất', width: 7.5, filterable: true, maxWidth: 8 },
@@ -732,10 +886,22 @@ const getRowIndex = (rowIndex) => {
     const pageSize = lazyParams.value.limit || 20;
     return (currentPage - 1) * pageSize + rowIndex + 1;
 };
+const currentSort = ref({
+    sortBy: null,
+    sortOrder: 'DESC'
+});
+const getColumnStyle = computed(() => {
+    return (item) => ({
+        minWidth: `${(isMobile.value ? item.mobileWidth || item.width : item.width) - (isAdmin.value ? 0 : item.filterable ? 1 : 2)}rem`,
+        height: '60px',
+        maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined
+    });
+});
 </script>
 
 <template>
     <div>
+        <ConnectionStatus />
         <div class="card">
             <Toolbar class="mb-6">
                 <template #start>
@@ -773,6 +939,8 @@ const getRowIndex = (rowIndex) => {
                 @columnReorder="onColumnReorder"
                 @sort="onSort"
                 @filter="onFilter"
+                :sortField="currentSort.sortBy"
+                :sortOrder="currentSort.sortOrder === 'ASC' ? 1 : -1"
             >
                 <template #empty>
                     <span>Không có căn hộ nào.</span>
@@ -794,7 +962,7 @@ const getRowIndex = (rowIndex) => {
                         </div>
                     </div>
                 </template>
-                <Column selectionMode="multiple" :frozen="!isMobile" style="width: 3rem; height: 60px" :exportable="false">
+                <Column selectionMode="multiple" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
                     <template #loading>
                         <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
                             <Skeleton width="100%" height="1rem" />
@@ -802,7 +970,7 @@ const getRowIndex = (rowIndex) => {
                     </template>
                 </Column>
                 <!-- Cột số thứ tự -->
-                <Column header="STT" frozen :sortable="false">
+                <Column header="STT" :frozen="!isMobile" :sortable="false">
                     <template #body="{ index }">
                         <div class="flex items-center justify-center">
                             <span class="font-bold">{{ getRowIndex(index) }}</span>
@@ -817,12 +985,12 @@ const getRowIndex = (rowIndex) => {
 
                 <Column
                     v-for="item in columns"
-                    :sortable="item.sortable !== false"
+                    :sortable="item.sortable !== false && isAdmin"
                     :key="item.key"
                     :sortField="item.key"
                     :showFilterMatchModes="false"
                     :frozen="item.frozen && !isMobile"
-                    :style="{ minWidth: `${isMobile ? item.mobileWidth : item.width || 3}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
+                    :style="getColumnStyle(item)"
                     :class="item.frozen ? 'font-bold' : ''"
                 >
                     <template #body="{ data }">
@@ -994,9 +1162,8 @@ const getRowIndex = (rowIndex) => {
                 </div>
 
                 <div class="flex flex-col gap-y-2">
-                    <label>SĐT chủ nhà <span class="text-red-500">*</span></label>
-                    <InputText v-model="form.apartmentContactInfo" class="w-full text-right" :invalid="!!errors.apartmentContactInfo" @input="formatPhone('apartmentContactInfo')" />
-                    <small v-if="errors.apartmentContactInfo" class="text-red-500">{{ errors.apartmentContactInfo }}</small>
+                    <label>SĐT chủ nhà</label>
+                    <InputText v-model="form.apartmentContactInfo" class="w-full text-right" @input="formatPhone('apartmentContactInfo')" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
@@ -1106,6 +1273,8 @@ const getRowIndex = (rowIndex) => {
                         numToleratedItems: 5,
                         step: 5
                     }"
+                    :sortField="currentSort.sortBy"
+                    :sortOrder="currentSort.sortOrder === 'ASC' ? 1 : -1"
                     @columnReorder="onColumnReorder"
                     @sort="onSort"
                     @filter="onFilter"
@@ -1128,7 +1297,7 @@ const getRowIndex = (rowIndex) => {
                         </div>
                     </template>
                     <!-- Cột số thứ tự -->
-                    <Column header="STT" frozen :sortable="false">
+                    <Column header="STT" :frozen="!isMobile" :sortable="false">
                         <template #body="{ index }">
                             <div class="flex items-center justify-center">
                                 <span class="font-bold">{{ getRowIndex(index) }}</span>
@@ -1147,7 +1316,7 @@ const getRowIndex = (rowIndex) => {
                         :sortField="item.key"
                         :showFilterMatchModes="false"
                         :frozen="isMobile ? item.mobileFrozen : item.frozen"
-                        :style="{ minWidth: `${isMobile ? item.mobileWidth : item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
+                        :style="getColumnStyle(item)"
                         :class="item.frozen ? 'font-bold' : ''"
                     >
                         <template #body="{ data }">
@@ -1281,74 +1450,5 @@ const getRowIndex = (rowIndex) => {
     :deep(.p-cell-content) {
         padding: 0.25rem 0.5rem;
     }
-}
-.custom-galleria :deep(.p-galleria-item-wrapper) {
-    position: relative;
-}
-
-.custom-galleria :deep(.p-galleria-item-prev),
-.custom-galleria :deep(.p-galleria-item-next) {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1;
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.custom-galleria :deep(.p-galleria-item-prev):hover,
-.custom-galleria :deep(.p-galleria-item-next):hover {
-    background: rgba(0, 0, 0, 0.8);
-    transform: translateY(-50%) scale(1.1);
-}
-
-.custom-galleria :deep(.p-galleria-item-prev) {
-    left: 20px;
-}
-
-.custom-galleria :deep(.p-galleria-item-next) {
-    right: 20px;
-}
-
-.custom-galleria-fullscreen :deep(.p-galleria-item-prev),
-.custom-galleria-fullscreen :deep(.p-galleria-item-next) {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1;
-    background: rgba(0, 0, 0, 0.6);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 60px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.custom-galleria-fullscreen :deep(.p-galleria-item-prev):hover,
-.custom-galleria-fullscreen :deep(.p-galleria-item-next):hover {
-    background: rgba(0, 0, 0, 0.9);
-    transform: translateY(-50%) scale(1.1);
-}
-
-.custom-galleria-fullscreen :deep(.p-galleria-item-prev) {
-    left: 30px;
-}
-
-.custom-galleria-fullscreen :deep(.p-galleria-item-next) {
-    right: 30px;
 }
 </style>

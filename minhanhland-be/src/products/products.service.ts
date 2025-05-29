@@ -10,6 +10,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { MasterDataEntity } from 'src/master-data/entities/master-data.entity';
 import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
+import { UserSortPreferencesService } from 'src/user-sort-preference/user-sort-preference.service';
+import { ProductGateway } from './product.gateway';
 
 @Injectable()
 export class ProductService {
@@ -22,22 +24,44 @@ export class ProductService {
     private readonly masterDataRepo: Repository<MasterDataEntity>,
     @InjectRepository(ProductFieldPermission)
     private readonly permissionsRepo: Repository<ProductFieldPermission>,
+    private readonly userSortPreferencesService: UserSortPreferencesService,
+    private readonly productGateway: ProductGateway,
   ) { }
 
   async create(dto: CreateProductDto, files: Express.Multer.File[]) {
     const apartmentTypeEntity = await this.masterDataRepo.findOne({
       where: { id: dto.apartmentType },
     });
+    const subdivisionEntity = await this.masterDataRepo.findOne({
+      where: { id: dto.subdivision },
+    });
     const product = this.productRepo.create({
       ...dto,
       apartmentType: apartmentTypeEntity,
+      subdivision: subdivisionEntity,
     });
     if (files?.length) {
       product.imageList = files.map((f) =>
         this.imageRepo.create({ url: `/uploads/products/${f.filename}` }),
       );
     }
-    return this.productRepo.save(product);
+    
+    const savedProduct = await this.productRepo.save(product);
+    
+    // Load full product with relations for notification
+    const fullProduct = await this.productRepo.findOne({
+      where: { id: savedProduct.id },
+      relations: ['imageList', 'apartmentType', 'subdivision'],
+    });
+
+    // Emit WebSocket notification
+    this.productGateway.notifyProductCreated(
+      fullProduct,
+      dto.subdivision,
+      dto.apartmentType,
+    );
+
+    return fullProduct;
   }
 
   async update(
@@ -68,22 +92,47 @@ export class ProductService {
       );
       product.imageList = (product.imageList || []).concat(newFiles);
     }
-    return this.productRepo.save(product);
+    const updatedProduct = await this.productRepo.save(product);
+     // Load full product with relations for notification
+    const fullProduct = await this.productRepo.findOne({
+      where: { id: updatedProduct.id },
+      relations: ['imageList', 'apartmentType', 'subdivision'],
+    });
+
+    // Emit WebSocket notification
+    this.productGateway.notifyProductUpdated(
+      fullProduct,
+      fullProduct.subdivision.id,
+      fullProduct.apartmentType.id,
+    );
+    return updatedProduct;
   }
 
   async remove(id: string) {
     const product = await this.productRepo.findOne({
       where: { id },
-      relations: ['imageList'],
+      relations: ['imageList', 'apartmentType', 'subdivision'],
     });
+    
+    if (!product) throw new Error('Product not found');
+    
+    const subdivision = product.subdivision.id;
+    const apartmentType = product.apartmentType.id;
+    
     if (product?.imageList?.length) {
       for (const img of product.imageList) {
         const filepath = path.join('./', img.url);
         if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
       }
     }
+    
     await this.imageRepo.delete({ product: { id } });
-    return this.productRepo.delete(id);
+    const result = await this.productRepo.delete(id);
+    
+    // Emit WebSocket notification
+    this.productGateway.notifyProductDeleted(id, subdivision, apartmentType);
+    
+    return result;
   }
 
   async findAllWithFilters(query: ProductQueryDto, userId: string) {
@@ -139,19 +188,53 @@ export class ProductService {
     builder.andWhere('(product.subdivision.id = :subdivision)', {
       subdivision: query.subdivision,
     });
+
+    // Get user's sort preference
+    const sortPreference = await this.userSortPreferencesService.getSortPreference(
+      'products',
+    );
+
+    // Apply sorting - use user preference if available, otherwise use query params
     if (query.sortBy) {
+      // Save new sort preference
+      await this.userSortPreferencesService.saveSortPreference({
+        pageKey: 'products',
+        sortBy: query.sortBy,
+        sortOrder: query.sortOrder || 'DESC',
+      });
       builder.orderBy(`product.${query.sortBy}`, query.sortOrder || 'DESC');
+    } else if (sortPreference && sortPreference.sortBy) {
+      // Use saved preference
+      builder.orderBy(`product.${sortPreference.sortBy}`, sortPreference.sortOrder);
+    } else {
+      // Default sorting
+      builder.orderBy('product.createdAt', 'DESC');
     }
+
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     builder.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await builder.getManyAndCount();
+    
+    // Include current sort info in response
+    const currentSort = query.sortBy ? {
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder || 'DESC',
+    } : sortPreference ? {
+      sortBy: sortPreference.sortBy,
+      sortOrder: sortPreference.sortOrder,
+    } : {
+      sortBy: 'createdAt',
+      sortOrder: 'DESC' as const,
+    };
+
     return {
       data,
       total,
       page,
       limit,
+      currentSort,
     };
   }
   async getFilterOptions(query: ProductQueryDto, userId: string) {

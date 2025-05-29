@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { ProductFieldPermissionsModule } from './product_field_permissions/product_field_permissions.module';
 import { ImportExcelModule } from './import-excel/import-excel.module';
+import { UserSortPreferencesModule } from './user-sort-preference/user-sort-preference.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { ImportExcelModule } from './import-excel/import-excel.module';
     AuthModule,
     MasterDataModule,
     ProductFieldPermissionsModule,
-    ImportExcelModule
+    ImportExcelModule,
+    UserSortPreferencesModule
   ],
   controllers: [AppController],
   providers: [AppService],

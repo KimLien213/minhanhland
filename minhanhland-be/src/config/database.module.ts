@@ -6,6 +6,7 @@ import { MasterDataEntity } from 'src/master-data/entities/master-data.entity';
 import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
 import { ProductImage } from 'src/products/entities/product-image.entity';
 import { Product } from 'src/products/entities/product.entity';
+import { UserSortPreference } from 'src/user-sort-preference/entities/user-sort-preference.entity';
 import { UserEntity } from 'src/users/entities/user.entity';
 
 @Module({
@@ -27,7 +28,8 @@ import { UserEntity } from 'src/users/entities/user.entity';
           Product,
           ProductImage,
           MasterDataEntity,
-          ProductFieldPermission
+          ProductFieldPermission,
+          UserSortPreference
         ],
         synchronize: true,
       }),
