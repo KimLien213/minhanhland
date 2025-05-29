@@ -33,14 +33,21 @@ onBeforeMount(() => {
     itemKey.value = props.parentItemKey ? props.parentItemKey + '-' + props.index : String(props.index);
 
     const activeItem = layoutState.activeMenuItem;
-
-    isActiveMenu.value = activeItem === itemKey.value || activeItem ? activeItem.startsWith(itemKey.value + '-') : false;
+    isActiveMenu.value = activeItem === itemKey.value || (activeItem ? activeItem.startsWith(itemKey.value + '-') : false);
 });
 
 watch(
     () => layoutState.activeMenuItem,
     (newVal) => {
-        isActiveMenu.value = newVal === itemKey.value || newVal.startsWith(itemKey.value + '-');
+        const oldActive = isActiveMenu.value;
+        isActiveMenu.value = newVal === itemKey.value || (newVal ? newVal.startsWith(itemKey.value + '-') : false);
+
+        // Debug chỉ cho menu items có route
+        if (props.item.to && oldActive !== isActiveMenu.value) {
+            console.log(`🔄 ${props.item.label} (${itemKey.value}): ${oldActive} -> ${isActiveMenu.value}`);
+            console.log(`   Route: ${props.item.to}`);
+            console.log(`   Active key: ${newVal}`);
+        }
     }
 );
 
@@ -58,13 +65,21 @@ function itemClick(event, item) {
         item.command({ originalEvent: event, item: item });
     }
 
-    const foundItemKey = item.items ? (isActiveMenu.value ? props.parentItemKey : itemKey) : itemKey.value;
-
-    setActiveMenuItem(foundItemKey);
+    // Chỉ set active menu nếu không phải là parent menu có children
+    if (!item.items) {
+        console.log(`🖱️ Menu clicked: ${item.label} -> ${item.to} (key: ${itemKey.value})`);
+        setActiveMenuItem(itemKey.value);
+    } else {
+        // Đối với parent menu, toggle expand/collapse
+        const foundItemKey = isActiveMenu.value ? props.parentItemKey : itemKey.value;
+        setActiveMenuItem(foundItemKey);
+    }
 }
 
 function checkActiveRoute(item) {
-    return route.path === item.to;
+    // Kiểm tra exact match với current route
+    const isActive = route.path === item.to;
+    return isActive;
 }
 </script>
 

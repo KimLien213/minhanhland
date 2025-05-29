@@ -30,8 +30,9 @@ const handleLogin = async () => {
 
     try {
         await authService.login(username.value, password.value);
+        debugger;
         if (authService.isAdmin()) {
-            router.push({ name: 'employee' });
+            router.push(menuStore.defaultProductRoute || '/employee');
         } else {
             router.push(menuStore.defaultProductRoute || '/unauthorized');
         }

@@ -1,5 +1,6 @@
 import AppLayout from '@/layout/AppLayout.vue';
 import { authService } from '@/service/AuthService';
+import { useMenuStore } from '@/stores/menuStore';
 import { createRouter, createWebHistory } from 'vue-router';
 
 const router = createRouter({
@@ -9,6 +10,20 @@ const router = createRouter({
             path: '/',
             component: AppLayout,
             children: [
+                {
+                    path: '',
+                    name: 'home',
+                    redirect: () => {
+                        const menuStore = useMenuStore();
+                        // Redirect đến default product route nếu có
+                        if (menuStore.defaultProductRoute) {
+                            return menuStore.defaultProductRoute;
+                        }
+                        // Fallback - redirect đến trang đầu tiên có thể truy cập
+                        return authService.isAdmin() ? '/employee' : '/auth/login';
+                    },
+                    meta: { requiresAuth: true }
+                },
                 {
                     path: '/employee',
                     name: 'employee',
@@ -76,6 +91,9 @@ router.beforeEach((to, from, next) => {
     const isAdmin = authService.isAdmin();
     const requiresAuth = to.meta.requiresAuth;
     const requiresAdmin = to.meta.requiresAdmin || false;
+
+    // Log để debug
+    console.log('Navigation:', { to: to.path, from: from.path });
 
     if (requiresAuth && !isLoggedIn) {
         next({ name: 'login' });

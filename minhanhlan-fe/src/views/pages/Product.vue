@@ -1,4 +1,5 @@
 <script setup>
+import FullscreenImageGallery from '@/components/galeria/FullscreenImageGallery.vue';
 import { authService } from '@/service/AuthService';
 import { productService } from '@/service/ProductService';
 import { FilterMatchMode } from '@primevue/core/api';
@@ -591,24 +592,18 @@ const getMe = async () => {
 };
 
 const columnDefaults = ref([
-    { key: 'buildingCode', label: 'Mã tòa', frozen: !isMobile.value, width: isMobile ? 6 : 7, filterable: true, maxWidth: 8 },
-    { key: 'apartmentCode', label: 'Mã căn', frozen: true, width: isMobile ? 4 : 5, maxWidth: 8 },
-    { key: 'apartmentEncode', label: 'Mã căn x', frozen: !isMobile.value, width: isMobile ? 4 : 5 },
-    { key: 'area', label: isMobile ? 'S' : 'S (m2)', type: 's', width: isMobile ? 4 : 6.5, filterable: true, maxWidth: 6.5 },
+    { key: 'buildingCode', label: 'Mã tòa', frozen: true, mobileFrozen: false, width: 7, mobileWidth: 6, filterable: true, maxWidth: 8 },
+    { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4, maxWidth: 8 },
+    { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: false, width: 5, mobileWidth: 4 },
+    { key: 'area', label: 'S', type: 's', width: 6.5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
     { key: 'sellingPrice', label: 'Giá bán', width: 5, maxWidth: 6.5 },
     { key: 'tax', label: 'Thuế phí', type: 'money', width: 6, maxWidth: 6 },
-    { key: 'furnitureNote', label: 'Nội thất', width: 6, filterable: true, maxWidth: 8 },
+    { key: 'furnitureNote', label: 'Nội thất', width: 7.5, filterable: true, maxWidth: 8 },
     { key: 'mortgageInfo', label: 'TT Sổ đỏ + Vay', width: 11, filterable: true, maxWidth: 15 },
     { key: 'description', label: 'Lưu ý', width: 10, maxWidth: 12 },
     { key: 'balconyDirection', label: 'Ban công', type: 'tag', color: (value) => getDirectionColor(value), width: 8, filterable: true },
     { key: 'updatedAt', label: 'Ngày cập nhật', type: 'date', width: 8 },
-    {
-        key: 'imageList',
-        label: 'Hình ảnh',
-        type: 'images',
-        width: 8,
-        sortable: false
-    },
+    { key: 'imageList', label: 'Hình ảnh', type: 'images', width: 8, sortable: false },
     {
         key: 'status',
         label: 'Trạng thái',
@@ -713,65 +708,30 @@ const handleRemoveImage = (file) => {
     }
 };
 
-// Webcam support
-const showCamera = ref(false);
-const videoRef = ref(null);
-let stream = null;
-
-const startCamera = async () => {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        videoRef.value.srcObject = stream;
-    } catch (err) {
-        console.error('Camera error:', err);
-    }
-};
-
-const stopCamera = () => {
-    if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        stream = null;
-    }
-    showCamera.value = false;
-};
-
-const captureImage = () => {
-    const video = videoRef.value;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-
-    canvas.toBlob((blob) => {
-        const file = new File([blob], `webcam-${Date.now()}.png`, { type: 'image/png' });
-        file.objectURL = URL.createObjectURL(file);
-        fileUploadRef.value?.files?.push(file);
-        onSelectedFiles({ files: fileUploadRef.value.files });
-    }, 'image/png');
-
-    stopCamera();
-};
-
-watch(showCamera, (val) => {
-    if (val) startCamera();
-    else stopCamera();
-});
-
 const onSelectedFiles = (event) => {
     files.value = event.files;
 };
 
 const showImageGalery = ref(false);
 const imageGalery = ref([]);
-const showImages = (images) => {
-    showImageGalery.value = true;
-    imageGalery.value = images.map((t) => {
-        return { url: import.meta.env.VITE_API_URL + t.url };
-    });
-};
 
+// Update showImages function
+const showImages = (images) => {
+    if (!images || images.length === 0) return;
+
+    imageGalery.value = images.map((t, index) => ({
+        src: import.meta.env.VITE_API_URL + t.url,
+        alt: `Hình ảnh ${index + 1}`
+    }));
+
+    showImageGalery.value = true;
+};
 const fullScreen = ref(false);
+const getRowIndex = (rowIndex) => {
+    const currentPage = lazyParams.value.page || 1;
+    const pageSize = lazyParams.value.limit || 20;
+    return (currentPage - 1) * pageSize + rowIndex + 1;
+};
 </script>
 
 <template>
@@ -823,11 +783,11 @@ const fullScreen = ref(false);
                             <span class="text-sm font-bold">Tống số: {{ totalRecords }} căn hộ</span>
                         </div>
                         <div class="flex items-end gap-2">
-                            <IconField>
+                            <IconField class="w-full">
                                 <InputIcon>
                                     <i class="pi pi-search" />
                                 </InputIcon>
-                                <InputText v-model="filters['global'].value" placeholder="Tìm kiếm..." />
+                                <InputText v-model="filters['global'].value" class="w-full" placeholder="Tìm kiếm..." />
                             </IconField>
                             <Button type="button" @click="resetData" icon="pi pi-refresh" text />
                             <Button type="button" icon="pi pi-window-maximize" @click="fullScreen = true" text />
@@ -841,6 +801,19 @@ const fullScreen = ref(false);
                         </div>
                     </template>
                 </Column>
+                <!-- Cột số thứ tự -->
+                <Column header="STT" frozen :sortable="false">
+                    <template #body="{ index }">
+                        <div class="flex items-center justify-center">
+                            <span class="font-bold">{{ getRowIndex(index) }}</span>
+                        </div>
+                    </template>
+                    <template #loading>
+                        <div class="flex items-center justify-center" style="height: 17px; flex-grow: 1; overflow: hidden">
+                            <Skeleton width="2rem" height="1rem" />
+                        </div>
+                    </template>
+                </Column>
 
                 <Column
                     v-for="item in columns"
@@ -849,7 +822,7 @@ const fullScreen = ref(false);
                     :sortField="item.key"
                     :showFilterMatchModes="false"
                     :frozen="item.frozen && !isMobile"
-                    :style="{ minWidth: `${item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
+                    :style="{ minWidth: `${isMobile ? item.mobileWidth : item.width || 3}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
                     :class="item.frozen ? 'font-bold' : ''"
                 >
                     <template #body="{ data }">
@@ -1066,7 +1039,7 @@ const fullScreen = ref(false);
                             </div>
                         </div>
 
-                        <div v-if="mergedImageList.length === 0" class="flex items-center justify-center flex-col">
+                        <div class="flex items-center justify-center flex-col">
                             <i class="pi pi-cloud-upload !border-2 !rounded-full !p-5 !text-4xl !text-muted-color" />
                             <p class="mt-6 mb-0">Kéo hoặc paste ảnh vào đây.</p>
                         </div>
@@ -1103,15 +1076,7 @@ const fullScreen = ref(false);
                 <Button label="Yes" icon="pi pi-check" text @click="deleteSelectedProducts" />
             </template>
         </Dialog>
-
-        <Dialog v-model:visible="showImageGalery" header="Hình ảnh" class="w-[90vw] sm:w-[350px] md:w-[650px]" :modal="true">
-            <div class="flex gap-3">
-                <Image v-for="img in imageGalery" :key="img.url" :src="img.url" preview width="100" />
-            </div>
-            <template #footer>
-                <Button label="Đóng" icon="pi pi-times" text @click="showImageGalery = false" />
-            </template>
-        </Dialog>
+        <FullscreenImageGallery v-model:visible="showImageGalery" :images="imageGalery" :show-thumbnails="true" />
         <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
             <div class="responsive-zoom-table">
                 <DataTable
@@ -1152,7 +1117,7 @@ const fullScreen = ref(false);
                     <template #header>
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 w-full">
                             <div class="flex items-end gap-2">
-                                <IconField>
+                                <IconField class="w-full">
                                     <InputIcon>
                                         <i class="pi pi-search" />
                                     </InputIcon>
@@ -1162,15 +1127,27 @@ const fullScreen = ref(false);
                             </div>
                         </div>
                     </template>
-
+                    <!-- Cột số thứ tự -->
+                    <Column header="STT" frozen :sortable="false">
+                        <template #body="{ index }">
+                            <div class="flex items-center justify-center">
+                                <span class="font-bold">{{ getRowIndex(index) }}</span>
+                            </div>
+                        </template>
+                        <template #loading>
+                            <div class="flex items-center justify-center" style="height: 17px; flex-grow: 1; overflow: hidden">
+                                <Skeleton width="2rem" height="1rem" />
+                            </div>
+                        </template>
+                    </Column>
                     <Column
                         v-for="item in columns"
                         :sortable="item.sortable !== false"
                         :key="item.key"
                         :sortField="item.key"
                         :showFilterMatchModes="false"
-                        :frozen="item.frozen && !isMobile"
-                        :style="{ minWidth: `${item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
+                        :frozen="isMobile ? item.mobileFrozen : item.frozen"
+                        :style="{ minWidth: `${isMobile ? item.mobileWidth : item.width}rem`, height: '60px', maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined }"
                         :class="item.frozen ? 'font-bold' : ''"
                     >
                         <template #body="{ data }">
@@ -1288,14 +1265,14 @@ const fullScreen = ref(false);
     </div>
 </template>
 <style scoped>
+.responsive-zoom-table {
+    transform-origin: top left;
+    width: 100%;
+    height: 100%;
+}
+
 /* Chỉ áp dụng khi chiều rộng nhỏ hơn 768px (điện thoại) */
 @media screen and (max-width: 768px) {
-    .responsive-zoom-table {
-        transform-origin: top left;
-        width: 100%;
-        height: 100%;
-    }
-
     :deep(.p-datatable) {
         font-size: 0.85rem;
     }
@@ -1304,5 +1281,74 @@ const fullScreen = ref(false);
     :deep(.p-cell-content) {
         padding: 0.25rem 0.5rem;
     }
+}
+.custom-galleria :deep(.p-galleria-item-wrapper) {
+    position: relative;
+}
+
+.custom-galleria :deep(.p-galleria-item-prev),
+.custom-galleria :deep(.p-galleria-item-next) {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.custom-galleria :deep(.p-galleria-item-prev):hover,
+.custom-galleria :deep(.p-galleria-item-next):hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.custom-galleria :deep(.p-galleria-item-prev) {
+    left: 20px;
+}
+
+.custom-galleria :deep(.p-galleria-item-next) {
+    right: 20px;
+}
+
+.custom-galleria-fullscreen :deep(.p-galleria-item-prev),
+.custom-galleria-fullscreen :deep(.p-galleria-item-next) {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.custom-galleria-fullscreen :deep(.p-galleria-item-prev):hover,
+.custom-galleria-fullscreen :deep(.p-galleria-item-next):hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.custom-galleria-fullscreen :deep(.p-galleria-item-prev) {
+    left: 30px;
+}
+
+.custom-galleria-fullscreen :deep(.p-galleria-item-next) {
+    right: 30px;
 }
 </style>
