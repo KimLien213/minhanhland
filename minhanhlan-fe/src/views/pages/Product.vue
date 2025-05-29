@@ -124,13 +124,11 @@ watch(
 // Socket functions - Fixed version
 const initializeSocket = () => {
     try {
-        console.log('🚀 Initializing socket connection...');
         socketService.connect();
 
         // Wait for connection before joining room
         setTimeout(() => {
             if (subdivision.value && apartmentType.value) {
-                console.log(`🏠 Joining room: ${subdivision.value}-${apartmentType.value}`);
                 socketService.joinProductRoom(subdivision.value, apartmentType.value);
             }
 
@@ -144,7 +142,6 @@ const initializeSocket = () => {
 
 const updateSocketRoom = () => {
     if (!socketService.isConnected()) {
-        console.log('Socket not connected, will join room when connected');
         return;
     }
 
@@ -155,7 +152,6 @@ const updateSocketRoom = () => {
     }
 
     if (subdivision.value && apartmentType.value) {
-        console.log(`🏠 Switching to room: ${subdivision.value}-${apartmentType.value}`);
         socketService.joinProductRoom(subdivision.value, apartmentType.value);
     }
 };
@@ -164,18 +160,10 @@ const setupSocketListeners = () => {
     // Clean up existing listeners
     cleanupSocket();
 
-    console.log('🎧 Setting up socket listeners...');
-
     // Product created
     const cleanupCreated = socketService.onProductCreated((event) => {
-        console.log('📦 Product created received:', event);
-        console.log('📦 Event data subdivision:', event.data?.subdivision);
-        console.log('📦 Event data apartmentType:', event.data?.apartmentType);
-        console.log('📦 Current route params:', { subdivision: subdivision.value, apartmentType: apartmentType.value });
-
         // Check if this event is for current room
         if (isEventForCurrentRoom(event.data)) {
-            console.log('✅ Event is for current room, updating UI');
             handleProductCreated(event.data);
             toast.add({
                 severity: 'info',
@@ -190,13 +178,7 @@ const setupSocketListeners = () => {
 
     // Product updated
     const cleanupUpdated = socketService.onProductUpdated((event) => {
-        console.log('📝 Product updated received:', event);
-        console.log('📝 Event data subdivision:', event.data?.subdivision);
-        console.log('📝 Event data apartmentType:', event.data?.apartmentType);
-        console.log('📝 Current route params:', { subdivision: subdivision.value, apartmentType: apartmentType.value });
-
         if (isEventForCurrentRoom(event.data)) {
-            console.log('✅ Event is for current room, updating UI');
             handleProductUpdated(event.data);
             toast.add({
                 severity: 'info',
@@ -211,22 +193,18 @@ const setupSocketListeners = () => {
 
     // Product deleted
     const cleanupDeleted = socketService.onProductDeleted((event) => {
-        console.log('🗑️ Product deleted received:', event);
-
         // For delete events, we don't need to check room since we only have the ID
         handleProductDeleted(event.data.id);
         toast.add({
             severity: 'warn',
             summary: 'Xóa sản phẩm',
-            detail: `Một căn hộ vừa được xóa`,
+            detail: `Căn hộ ${event.data.apartmentCode} đã bị xóa`,
             life: 3000
         });
     });
 
     // Store cleanup functions
     socketCleanups.value = [cleanupCreated, cleanupUpdated, cleanupDeleted];
-
-    console.log('✅ Socket listeners setup complete');
 };
 
 // Helper function to check if event is for current room
@@ -243,8 +221,6 @@ const isEventForCurrentRoom = (productData) => {
 };
 
 const cleanupSocket = () => {
-    console.log('🧹 Cleaning up socket...');
-
     // Clean up listeners
     socketCleanups.value.forEach((cleanup) => cleanup());
     socketCleanups.value = [];
@@ -252,8 +228,6 @@ const cleanupSocket = () => {
 
 // Handle real-time updates - Enhanced version
 const handleProductCreated = (newProduct) => {
-    console.log('➕ Handling product created:', newProduct);
-
     // Add to virtual products array at the beginning
     const updatedProducts = [newProduct, ...virtualProducts.value.filter((p) => !p.isPlaceholder)];
 
@@ -282,16 +256,12 @@ const handleProductCreated = (newProduct) => {
 };
 
 const handleProductUpdated = (updatedProduct) => {
-    console.log('✏️ Handling product updated:', updatedProduct);
-
     // Find and update in virtual products array
     const index = virtualProducts.value.findIndex((p) => p?.id === updatedProduct.id);
     if (index !== -1) {
         virtualProducts.value[index] = { ...updatedProduct };
         // Trigger reactivity
         virtualProducts.value = [...virtualProducts.value];
-
-        console.log(`Updated product at index ${index}`);
     } else {
         console.log('Product not found in current view, might be in different page');
     }
@@ -303,8 +273,6 @@ const handleProductUpdated = (updatedProduct) => {
 };
 
 const handleProductDeleted = (productId) => {
-    console.log('🗑️ Handling product deleted:', productId);
-
     // Find and remove from virtual products array
     const index = virtualProducts.value.findIndex((p) => p?.id === productId);
     if (index !== -1) {
@@ -330,8 +298,6 @@ const handleProductDeleted = (productId) => {
         if (totalRecords.value > 0) {
             loadedPages.value.add(1);
         }
-
-        console.log(`Removed product at index ${index}, new total: ${totalRecords.value}`);
     }
 
     // Update filter options
@@ -342,8 +308,6 @@ const handleProductDeleted = (productId) => {
 
 // Enhanced cleanup in onBeforeUnmount
 onBeforeUnmount(() => {
-    console.log('🧹 Component unmounting, cleaning up socket...');
-
     window.removeEventListener('resize', handleResize);
 
     // Clean up socket
@@ -415,7 +379,6 @@ function resetFilters() {
 
 // Reset data và load lại từ đầu
 function resetData() {
-    console.log('Resetting data...'); // Debug log
     virtualProducts.value = [];
     totalRecords.value = 0;
     loadedPages.value.clear();
@@ -426,7 +389,6 @@ function resetData() {
 // Fetch initial data để biết total records - chỉ load page đầu
 async function fetchInitialData() {
     if (!lazyParams.value.apartmentType || !lazyParams.value.subdivision) {
-        console.warn('Missing apartmentType or subdivision parameters');
         return;
     }
 
@@ -461,13 +423,11 @@ async function fetchInitialData() {
                 }
             });
             loadedPages.value.add(1);
-            console.log('Loaded ONLY first page'); // Debug log
         }
 
         // Force reactivity update
         virtualProducts.value = [...virtualProducts.value];
     } catch (err) {
-        console.error('Error fetching initial data:', err);
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được sản phẩm' });
         virtualProducts.value = [];
         totalRecords.value = 0;
@@ -529,7 +489,6 @@ const loadProductsLazy = async (event) => {
         // Single update để trigger reactivity
         virtualProducts.value = _virtualProducts;
     } catch (err) {
-        console.error('❌ Error loading lazy data:', err);
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được sản phẩm' });
     } finally {
         lazyLoading.value = false;
@@ -1014,7 +973,7 @@ const getColumnStyle = computed(() => {
 
 <template>
     <div>
-        <ConnectionStatus />
+        <!-- <ConnectionStatus /> -->
         <div class="card">
             <Toolbar class="mb-6">
                 <template #start>

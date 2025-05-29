@@ -160,11 +160,8 @@ export class ProductService {
 
     // Emit WebSocket notification with error handling
     try {
-      console.log(`🔔 Sending product deleted notification for: ${apartmentCode}`);
-      console.log(`   Subdivision ID: ${subdivision}, ApartmentType ID: ${apartmentType}`);
-
       // Pass the IDs, not the full objects
-      this.productGateway.notifyProductDeleted(id, subdivision, apartmentType);
+      this.productGateway.notifyProductDeleted(product, subdivision, apartmentType);
     } catch (error) {
       console.error('❌ Error sending WebSocket notification:', error);
     }

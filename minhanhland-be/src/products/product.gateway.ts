@@ -10,6 +10,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { Product } from './entities/product.entity';
 
 @WebSocketGateway({
   cors: {
@@ -72,7 +73,7 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
     return roomInfo;
   }
 
-  // Emit product created event
+  // Emit product created event - FIXED: Only emit to specific room
   notifyProductCreated(product: any, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
     
@@ -82,17 +83,14 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
       timestamp: new Date().toISOString(),
     };
 
-    // Emit to specific room
+    // ONLY emit to specific room - removed the broadcast to all clients
     this.server.to(roomName).emit('product-created', payload);
-    
-    // Also emit to all connected clients as fallback
-    this.server.emit('product-created', payload);
     
     this.logger.log(`Product created notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
     this.logger.debug('Room info:', this.getRoomInfo());
   }
 
-  // Emit product updated event
+  // Emit product updated event - FIXED: Only emit to specific room
   notifyProductUpdated(product: any, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
     
@@ -102,35 +100,29 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
       timestamp: new Date().toISOString(),
     };
 
-    // Emit to specific room
+    // ONLY emit to specific room - removed the broadcast to all clients
     this.server.to(roomName).emit('product-updated', payload);
-    
-    // Also emit to all connected clients as fallback
-    this.server.emit('product-updated', payload);
     
     this.logger.log(`Product updated notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
   }
 
-  // Emit product deleted event
-  notifyProductDeleted(productId: string, subdivision: string, apartmentType: string) {
+  // Emit product deleted event - FIXED: Only emit to specific room
+  notifyProductDeleted(product: Product, subdivision: string, apartmentType: string) {
     const roomName = `${subdivision}-${apartmentType}`;
     
     const payload = {
       type: 'PRODUCT_DELETED',
-      data: { id: productId },
+      data: { id: product.id, apartmentCode: product.apartmentCode },
       timestamp: new Date().toISOString(),
     };
 
-    // Emit to specific room
+    // ONLY emit to specific room - removed the broadcast to all clients
     this.server.to(roomName).emit('product-deleted', payload);
-    
-    // Also emit to all connected clients as fallback
-    this.server.emit('product-deleted', payload);
     
     this.logger.log(`Product deleted notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
   }
 
-  // Debug method to broadcast to all clients
+  // Debug method to broadcast to all clients (keep for debugging if needed)
   broadcastToAll(event: string, data: any) {
     this.server.emit(event, data);
     this.logger.log(`Broadcasted ${event} to all ${this.server.sockets.sockets.size} connected clients`);

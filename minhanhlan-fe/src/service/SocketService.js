@@ -8,11 +8,12 @@ class SocketService {
     this.currentRoom = null;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
-    this.reconnectDelay = 1000; // Start with 1 second
-    this.maxReconnectDelay = 30000; // Max 30 seconds
+    this.reconnectDelay = 1000;
+    this.maxReconnectDelay = 30000;
     this.reconnectTimer = null;
     this.isManualDisconnect = false;
     this.isConnecting = false;
+    this.eventHandlers = new Map(); // Track event handlers to prevent duplicates
   }
 
   connect() {
@@ -26,11 +27,11 @@ class SocketService {
 
     // Create socket with correct configuration
     this.socket = io(`${import.meta.env.VITE_API_URL}/products`, {
-      transports: ['websocket', 'polling'], // Allow both transports
+      transports: ['websocket', 'polling'],
       autoConnect: true,
-      reconnection: false, // We'll handle reconnection manually
+      reconnection: false,
       timeout: 20000,
-      forceNew: true, // Force new connection
+      forceNew: true,
     });
 
     this.setupSocketEvents();
@@ -41,13 +42,15 @@ class SocketService {
   setupSocketEvents() {
     if (!this.socket) return;
 
+    // Remove existing listeners first to prevent duplicates
+    this.removeAllListeners();
+
     this.socket.on('connect', () => {
       console.log('🔌 Socket connected:', this.socket.id);
       this.isConnecting = false;
       this.reconnectAttempts = 0;
-      this.reconnectDelay = 1000; // Reset delay
+      this.reconnectDelay = 1000;
 
-      // Clear any pending reconnect timer
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;
@@ -64,7 +67,6 @@ class SocketService {
       console.log('🔌 Socket disconnected:', reason);
       this.isConnecting = false;
 
-      // Only attempt reconnection if it wasn't a manual disconnect
       if (!this.isManualDisconnect && reason !== 'io client disconnect') {
         this.scheduleReconnect();
       }
@@ -78,26 +80,11 @@ class SocketService {
         this.scheduleReconnect();
       }
     });
-
-    // Add debug events
-    this.socket.on('product-created', (data) => {
-      console.log('🔥 Received product-created event:', data);
-    });
-
-    this.socket.on('product-updated', (data) => {
-      console.log('🔥 Received product-updated event:', data);
-    });
-
-    this.socket.on('product-deleted', (data) => {
-      console.log('🔥 Received product-deleted event:', data);
-    });
   }
 
   scheduleReconnect() {
-    // Don't schedule if we're already trying to reconnect
     if (this.reconnectTimer) return;
 
-    // Don't reconnect if we've exceeded max attempts
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.warn('🔌 Max reconnection attempts reached. Giving up.');
       return;
@@ -114,7 +101,6 @@ class SocketService {
         console.log(`🔌 Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
         this.socket?.connect();
 
-        // Exponential backoff with jitter
         this.reconnectDelay = Math.min(
           this.reconnectDelay * 2 + Math.random() * 1000,
           this.maxReconnectDelay
@@ -127,22 +113,19 @@ class SocketService {
     this.isManualDisconnect = true;
     this.isConnecting = false;
 
-    // Clear reconnect timer
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
 
-    // Clear current room
     this.currentRoom = null;
 
-    // Disconnect socket
     if (this.socket) {
+      this.removeAllListeners(); // Clean up listeners before disconnect
       this.socket.disconnect();
       this.socket = null;
     }
 
-    // Reset counters
     this.reconnectAttempts = 0;
     this.reconnectDelay = 1000;
   }
@@ -179,10 +162,9 @@ class SocketService {
     this.socket.emit('leave-product-room', roomData);
 
     this.currentRoom = null;
-    console.log(`🏠 Left product room: ${subdivision}-${apartmentType}`);
   }
 
-  // Listen for product events
+  // IMPROVED: Prevent duplicate event listeners
   onProductCreated(callback) {
     return this.addEventListener('product-created', callback);
   }
@@ -195,18 +177,26 @@ class SocketService {
     return this.addEventListener('product-deleted', callback);
   }
 
-  // Generic event listener with auto cleanup
+  // IMPROVED: Enhanced event listener with duplicate prevention
   addEventListener(event, callback) {
     if (!this.socket) {
-      console.warn('Socket not initialized');
       return () => { };
     }
 
-    // Wrap callback to add debugging
+    // Create a unique key for this event + callback combination
+    const callbackKey = `${event}_${Date.now()}_${Math.random()}`;
+
+    // Wrap callback to add debugging and prevent duplicates
     const wrappedCallback = (data) => {
-      console.log(`📨 Socket event received: ${event}`, data);
+      // Call the original callback
       callback(data);
     };
+
+    // Store the wrapper for cleanup
+    this.eventHandlers.set(callbackKey, {
+      event,
+      callback: wrappedCallback
+    });
 
     this.socket.on(event, wrappedCallback);
 
@@ -220,17 +210,30 @@ class SocketService {
     return () => {
       this.socket?.off(event, wrappedCallback);
       this.listeners.get(event)?.delete(wrappedCallback);
+      this.eventHandlers.delete(callbackKey);
     };
   }
 
-  // Clean up all listeners
+  // IMPROVED: Better cleanup of all listeners
   removeAllListeners() {
+    // Clean up tracked listeners
     this.listeners.forEach((callbacks, event) => {
       callbacks.forEach(callback => {
         this.socket?.off(event, callback);
       });
     });
     this.listeners.clear();
+
+    // Clean up event handlers
+    this.eventHandlers.forEach(({ event, callback }) => {
+      this.socket?.off(event, callback);
+    });
+    this.eventHandlers.clear();
+
+    // Remove all listeners from socket as final cleanup
+    if (this.socket) {
+      this.socket.removeAllListeners();
+    }
   }
 
   // Check connection status
@@ -247,6 +250,7 @@ class SocketService {
       currentRoom: this.currentRoom,
       nextReconnectDelay: this.reconnectDelay,
       isConnecting: this.isConnecting,
+      activeListeners: this.eventHandlers.size,
     };
   }
 
@@ -267,11 +271,9 @@ class SocketService {
       this.reconnectTimer = null;
     }
 
-    // If socket exists but disconnected, reconnect
     if (this.socket && !this.socket.connected) {
       this.socket.connect();
     } else {
-      // Create new connection
       this.connect();
     }
   }

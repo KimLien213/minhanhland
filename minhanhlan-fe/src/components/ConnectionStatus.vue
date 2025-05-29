@@ -75,8 +75,6 @@ const checkConnection = () => {
 
     if (statusChanged) {
         showStatus.value = true;
-        console.log('🔌 Connection status changed:', newStatus ? 'Connected' : 'Disconnected');
-
         // Auto hide after 3 seconds if connected
         if (newStatus) {
             setTimeout(() => {
@@ -106,7 +104,6 @@ const toggleDebugInfo = () => {
 };
 
 onMounted(() => {
-    console.log('🔌 ConnectionStatus component mounted');
     checkConnection();
     checkInterval = setInterval(checkConnection, 1000);
 });
