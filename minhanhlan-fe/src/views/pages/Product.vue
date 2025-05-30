@@ -1,13 +1,13 @@
 <script setup>
 import FullscreenImageGallery from '@/components/galeria/FullscreenImageGallery.vue';
 import MobilePasteFileUpload from '@/components/MobilePasteFileUpload.vue';
+import ProductDataTable from '@/components/ProductDataTable.vue';
 import { authService } from '@/service/AuthService';
 import { productService } from '@/service/ProductService';
 import { socketService } from '@/service/SocketService';
 import { sortPreferencesService } from '@/service/SortPreferencesService';
 import { useMenuStore } from '@/stores/menuStore';
 import { FilterMatchMode } from '@primevue/core/api';
-import { format } from 'date-fns';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -136,6 +136,67 @@ watch(
     }
 );
 
+// Các methods để handle events từ ProductDataTable component
+const handleSort = (event) => {
+    const newSortBy = event.sortField;
+    const newSortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
+
+    currentSort.value = {
+        sortBy: newSortBy,
+        sortOrder: newSortOrder
+    };
+
+    lazyParams.value.sortBy = newSortBy;
+    lazyParams.value.sortOrder = newSortOrder;
+
+    resetData();
+};
+
+const handleFilter = () => {
+    if (!isInitialized.value) return;
+
+    lazyParams.value.buildingCode = filters.value['buildingCode'].value;
+    lazyParams.value.apartmentCode = filters.value['apartmentCode'].value;
+    lazyParams.value.apartmentEncode = filters.value['apartmentEncode'].value;
+    lazyParams.value.area = filters.value['area'].value;
+    lazyParams.value.sellingPrice = filters.value['sellingPrice'].value;
+    lazyParams.value.tax = filters.value['tax'].value;
+    lazyParams.value.furnitureNote = filters.value['furnitureNote'].value;
+    lazyParams.value.mortgageInfo = filters.value['mortgageInfo'].value;
+    lazyParams.value.description = filters.value['description'].value;
+    lazyParams.value.balconyDirection = filters.value['balconyDirection'].value;
+    lazyParams.value.apartmentContactInfo = filters.value['apartmentContactInfo'].value;
+    lazyParams.value.contactInfo = filters.value['contactInfo'].value;
+    lazyParams.value.source = filters.value['source'].value;
+    lazyParams.value.status = filters.value['status'].value;
+
+    fetchFilterOptions();
+    resetData();
+};
+
+const handleRefresh = () => {
+    resetData();
+};
+
+const handleFullscreen = () => {
+    fullScreen.value = true;
+};
+
+const handleShowImages = (images) => {
+    showImages(images);
+};
+
+const handleEditProduct = (data) => {
+    editProduct(data);
+};
+
+const handleDeleteProduct = (data) => {
+    confirmDeleteProduct(data);
+};
+
+const handleLazyLoad = (event) => {
+    loadProductsLazy(event);
+};
 // Flag để tránh call API nhiều lần
 const isInitialized = ref(false);
 
@@ -1039,200 +1100,30 @@ const getColumnStyle = computed(() => {
                 </template>
             </Toolbar>
 
-            <DataTable
-                ref="dt"
-                :value="virtualProducts"
-                dataKey="id"
-                size="small"
-                v-model:selection="selectedProducts"
+            <!-- Sử dụng ProductDataTable component -->
+            <ProductDataTable
+                ref="mainDataTable"
+                :virtual-products="virtualProducts"
+                v-model:selected-products="selectedProducts"
                 :filters="filters"
-                resizableColumns
-                columnResizeMode="expand"
-                stripedRows
-                reorderableColumns
-                scrollable
-                scrollHeight="600px"
-                scrollDirection="horizontal"
-                filterDisplay="menu"
-                tableStyle="min-width: 50rem"
-                :virtualScrollerOptions="{
-                    lazy: true,
-                    onLazyLoad: loadProductsLazy,
-                    itemSize: 60,
-                    delay: 0,
-                    showLoader: true,
-                    loading: lazyLoading,
-                    numToleratedItems: 5,
-                    step: 5
-                }"
-                @columnReorder="onColumnReorder"
-                @sort="onSort"
-                @filter="onFilter"
-                :sortField="currentSort.sortBy"
-                :sortOrder="currentSort.sortOrder === 'ASC' ? 1 : -1"
-            >
-                <template #empty>
-                    <span>Không có căn hộ nào.</span>
-                </template>
-                <template #header>
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full">
-                        <div class="flex items-start justify-between gap-2">
-                            <span class="text-sm font-bold">{{ pageTitle }}</span>
-                            <span class="text-sm font-bold">Tống số: {{ totalRecords }} căn hộ</span>
-                        </div>
-                        <div class="flex items-end gap-2">
-                            <IconField class="w-full">
-                                <InputIcon>
-                                    <i class="pi pi-search" />
-                                </InputIcon>
-                                <InputText v-model="filters['global'].value" class="w-full" placeholder="Tìm kiếm..." />
-                            </IconField>
-                            <Button type="button" @click="resetData" icon="pi pi-refresh" text />
-                            <Button type="button" icon="pi pi-window-maximize" @click="fullScreen = true" text />
-                        </div>
-                    </div>
-                </template>
-                <Column selectionMode="multiple" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
-                    <template #loading>
-                        <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
-                            <Skeleton width="100%" height="1rem" />
-                        </div>
-                    </template>
-                </Column>
-                <!-- Cột số thứ tự -->
-                <Column header="STT" :frozen="!isMobile" :sortable="false">
-                    <template #body="{ index }">
-                        <div class="flex items-center justify-center">
-                            <span class="font-bold">{{ getRowIndex(index) }}</span>
-                        </div>
-                    </template>
-                    <template #loading>
-                        <div class="flex items-center justify-center" style="height: 17px; flex-grow: 1; overflow: hidden">
-                            <Skeleton width="2rem" height="1rem" />
-                        </div>
-                    </template>
-                </Column>
-
-                <Column
-                    v-for="item in columns"
-                    :sortable="item.sortable !== false && isAdmin"
-                    :key="item.key"
-                    :sortField="item.key"
-                    :showFilterMatchModes="false"
-                    :frozen="item.frozen && !isMobile"
-                    :style="getColumnStyle(item)"
-                    :class="item.frozen ? 'font-bold' : ''"
-                >
-                    <template #body="{ data }">
-                        <!-- Hiển thị skeleton cho placeholder -->
-                        <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
-                            <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
-                        </div>
-                        <!-- Render data với v-else-if để tối ưu -->
-                        <template v-else>
-                            <div v-if="item.type === 'tag'" class="flex items-center gap-2">
-                                <Tag :value="!item.text ? data[item.key] : item.text(data[item.key])" :severity="item.color(data[item.key])" :style="{ backgroundColor: item.color(data[item.key]), color: '#000' }" />
-                            </div>
-                            <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
-                                <span>{{ Number(data[item.key] || 0) }}m²</span>
-                            </div>
-                            <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key] || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
-                            <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
-                                <Button v-if="data[item.key]?.length > 0" @click="showImages(data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
-                                <span v-else>Không có ảnh</span>
-                            </div>
-                            <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
-                                <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
-                                    <i class="pi pi-phone text-lg"></i>
-                                    <span>{{ formatPhoneNumber(data[item.key]) }}</span>
-                                </a>
-                            </div>
-                            <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
-                                <span>{{ data[item.key] ? format(new Date(data[item.key]), 'yyyy-MM-dd') : null }}</span>
-                            </div>
-                            <div v-else class="flex items-center gap-2">
-                                <span>{{ data[item.key] || '' }}</span>
-                            </div>
-                        </template>
-                    </template>
-
-                    <template #loading>
-                        <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
-                            <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
-                        </div>
-                    </template>
-
-                    <template #header>
-                        <div class="relative w-full h-full">
-                            <span class="inline-block font-bold">{{ item.label }}</span>
-
-                            <i
-                                class="pi pi-filter absolute right-0 top-1/2 -translate-y-1/2 cursor-pointer"
-                                v-if="item.filterable"
-                                :class="filters[item.key]?.value?.length ? 'text-blue-500' : 'text-gray-400 hover:text-gray-700'"
-                                @click.stop="toggleFilter(item.key)"
-                            ></i>
-
-                            <MultiSelect
-                                v-if="item.filterable"
-                                :ref="(el) => setMultiSelectRef(item.key, el)"
-                                v-model="filters[item.key].value"
-                                :options="filterOptions[item.key]"
-                                @change="onFilter"
-                                filter
-                                display="chip"
-                                panelClass="z-50"
-                                panelStyle="width: 150px"
-                                placeholder="Lọc..."
-                                class="absolute top-full right-0 w-0 h-0 p-0 overflow-hidden border-none shadow-none focus:ring-0"
-                            >
-                                <template #option="slotProps">
-                                    <div v-if="item.type === 'tag'" class="flex items-center gap-2">
-                                        <Tag :value="!item.text ? slotProps.option : item.text(slotProps.option)" :severity="item.color(slotProps.option)" :style="{ backgroundColor: item.color(slotProps.option), color: '#000' }" />
-                                    </div>
-                                    <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
-                                        <span>{{ Number(slotProps.option) }}m²</span>
-                                    </div>
-                                    <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(slotProps.option).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
-                                    <div v-else-if="item.type === 'link'" class="flex items-center gap-2">
-                                        <i class="pi pi-paperclip"></i>
-                                        <span>Hình ảnh</span>
-                                    </div>
-                                    <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
-                                        <span>{{ slotProps.option ? format(new Date(slotProps.option), 'yyyy-MM-dd') : null }}</span>
-                                    </div>
-                                    <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
-                                        <span>{{ formatPhoneNumber(slotProps.option) }}</span>
-                                    </div>
-                                    <div v-else class="flex items-center gap-2">
-                                        <span>{{ slotProps.option }}</span>
-                                    </div>
-                                </template>
-                                <template #footer>
-                                    <div class="flex justify-end p-2 border-t">
-                                        <button type="button" class="text-xs text-blue-500 hover:underline" @click.stop="clearFilter(item.key)">Xóa lọc</button>
-                                    </div>
-                                </template>
-                            </MultiSelect>
-                        </div>
-                    </template>
-                </Column>
-
-                <Column :exportable="false" style="min-width: 12rem; height: 60px">
-                    <template #body="{ data }">
-                        <!-- Skeleton cho placeholder -->
-                        <div v-if="!data || data.isPlaceholder" class="flex items-center gap-2" style="height: 17px">
-                            <Skeleton width="2rem" height="2rem" class="rounded-full" />
-                            <Skeleton width="2rem" height="2rem" class="rounded-full" />
-                        </div>
-                        <!-- Action buttons -->
-                        <div v-else class="flex items-center gap-2">
-                            <Button icon="pi pi-pencil" outlined rounded size="small" @click="editProduct(data)" />
-                            <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="confirmDeleteProduct(data)" />
-                        </div>
-                    </template>
-                </Column>
-            </DataTable>
+                :filter-options="filterOptions"
+                :columns="columns"
+                :total-records="totalRecords"
+                :lazy-loading="lazyLoading"
+                :current-sort="currentSort"
+                :is-mobile="isMobile"
+                :is-admin="isAdmin"
+                :lazy-params="lazyParams"
+                scroll-height="600px"
+                @sort="handleSort"
+                @filter="handleFilter"
+                @refresh="handleRefresh"
+                @fullscreen="handleFullscreen"
+                @show-images="handleShowImages"
+                @edit-product="handleEditProduct"
+                @delete-product="handleDeleteProduct"
+                @lazy-load="handleLazyLoad"
+            />
         </div>
 
         <Dialog v-model:visible="productDialog" class="w-[90vw] sm:w-[500px] md:w-[600px]" header="Thông tin căn hộ" :modal="true">
@@ -1346,189 +1237,30 @@ const getColumnStyle = computed(() => {
         <FullscreenImageGallery v-model:visible="showImageGalery" :images="imageGalery" :show-thumbnails="true" />
         <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
             <div class="responsive-zoom-table">
-                <DataTable
-                    ref="dt"
-                    :value="virtualProducts"
-                    dataKey="id"
-                    size="small"
-                    v-model:selection="selectedProducts"
+                <ProductDataTable
+                    ref="fullscreenDataTable"
+                    :virtual-products="virtualProducts"
+                    v-model:selected-products="selectedProducts"
                     :filters="filters"
-                    resizableColumns
-                    columnResizeMode="expand"
-                    stripedRows
-                    reorderableColumns
-                    scrollable
-                    scrollHeight="flex"
-                    scrollDirection="horizontal"
-                    class="p-datatable-sm"
-                    filterDisplay="menu"
-                    tableStyle="min-width: 50rem"
-                    :virtualScrollerOptions="{
-                        lazy: true,
-                        onLazyLoad: loadProductsLazy,
-                        itemSize: 60,
-                        delay: 0,
-                        showLoader: true,
-                        loading: lazyLoading,
-                        numToleratedItems: 5,
-                        step: 5
-                    }"
-                    :sortField="currentSort.sortBy"
-                    :sortOrder="currentSort.sortOrder === 'ASC' ? 1 : -1"
-                    @columnReorder="onColumnReorder"
-                    @sort="onSort"
-                    @filter="onFilter"
-                >
-                    <template #empty>
-                        <span>Không có căn hộ nào.</span>
-                    </template>
-
-                    <template #header>
-                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 w-full">
-                            <div class="flex items-end gap-2">
-                                <IconField class="w-full">
-                                    <InputIcon>
-                                        <i class="pi pi-search" />
-                                    </InputIcon>
-                                    <InputText v-model="filters['global'].value" class="w-full" placeholder="Tìm kiếm..." />
-                                </IconField>
-                                <Button type="button" @click="resetData" icon="pi pi-refresh" text />
-                            </div>
-                        </div>
-                    </template>
-                    <!-- Cột số thứ tự -->
-                    <Column header="STT" :frozen="!isMobile" :sortable="false">
-                        <template #body="{ index }">
-                            <div class="flex items-center justify-center">
-                                <span class="font-bold">{{ getRowIndex(index) }}</span>
-                            </div>
-                        </template>
-                        <template #loading>
-                            <div class="flex items-center justify-center" style="height: 17px; flex-grow: 1; overflow: hidden">
-                                <Skeleton width="2rem" height="1rem" />
-                            </div>
-                        </template>
-                    </Column>
-                    <Column
-                        v-for="item in columns"
-                        :sortable="item.sortable !== false"
-                        :key="item.key"
-                        :sortField="item.key"
-                        :showFilterMatchModes="false"
-                        :frozen="isMobile ? item.mobileFrozen : item.frozen"
-                        :style="getColumnStyle(item)"
-                        :class="item.frozen ? 'font-bold' : ''"
-                    >
-                        <template #body="{ data }">
-                            <!-- Hiển thị skeleton cho placeholder -->
-                            <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
-                                <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
-                            </div>
-                            <!-- Render data với v-else-if để tối ưu -->
-                            <template v-else>
-                                <div v-if="item.type === 'tag'" class="flex items-center gap-2">
-                                    <Tag :value="!item.text ? data[item.key] : item.text(data[item.key])" :severity="item.color(data[item.key])" :style="{ backgroundColor: item.color(data[item.key]), color: '#000' }" />
-                                </div>
-                                <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
-                                    <span>{{ Number(data[item.key] || 0) }}m²</span>
-                                </div>
-                                <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key] || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
-                                <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
-                                    <Button v-if="data[item.key]?.length > 0" @click="showImages(data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
-                                    <span v-else>Không có ảnh</span>
-                                </div>
-                                <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
-                                    <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
-                                        <i class="pi pi-phone text-lg"></i>
-                                        <span>{{ formatPhoneNumber(data[item.key]) }}</span>
-                                    </a>
-                                </div>
-                                <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
-                                    <span>{{ data[item.key] ? format(new Date(data[item.key]), 'yyyy-MM-dd') : null }}</span>
-                                </div>
-                                <div v-else class="flex items-center gap-2">
-                                    <span>{{ data[item.key] || '' }}</span>
-                                </div>
-                            </template>
-                        </template>
-
-                        <template #loading>
-                            <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
-                                <Skeleton :width="item.type === 'tag' ? '80%' : item.type === 'phone' ? '70%' : '60%'" height="1rem" />
-                            </div>
-                        </template>
-
-                        <template #header>
-                            <div class="relative w-full h-full">
-                                <span class="inline-block font-bold">{{ item.label }}</span>
-
-                                <i
-                                    class="pi pi-filter absolute right-0 top-1/2 -translate-y-1/2 cursor-pointer"
-                                    v-if="item.filterable"
-                                    :class="filters[item.key]?.value?.length ? 'text-blue-500' : 'text-gray-400 hover:text-gray-700'"
-                                    @click.stop="toggleFilterFull(item.key)"
-                                ></i>
-
-                                <MultiSelect
-                                    v-if="item.filterable"
-                                    :ref="(el) => setMultiSelectFullRef(item.key, el)"
-                                    v-model="filters[item.key].value"
-                                    :options="filterOptions[item.key]"
-                                    @change="onFilter"
-                                    filter
-                                    display="chip"
-                                    panelClass="z-50"
-                                    panelStyle="width: 150px"
-                                    placeholder="Lọc..."
-                                    class="absolute top-full right-0 w-0 h-0 p-0 overflow-hidden border-none shadow-none focus:ring-0"
-                                >
-                                    <template #option="slotProps">
-                                        <div v-if="item.type === 'tag'" class="flex items-center gap-2">
-                                            <Tag :value="!item.text ? slotProps.option : item.text(slotProps.option)" :severity="item.color(slotProps.option)" :style="{ backgroundColor: item.color(slotProps.option), color: '#000' }" />
-                                        </div>
-                                        <div v-else-if="item.type === 's'" class="flex items-center gap-2 justify-end">
-                                            <span>{{ Number(slotProps.option) }}m²</span>
-                                        </div>
-                                        <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(slotProps.option).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
-                                        <div v-else-if="item.type === 'link'" class="flex items-center gap-2">
-                                            <i class="pi pi-paperclip"></i>
-                                            <span>Hình ảnh</span>
-                                        </div>
-                                        <div v-else-if="item.type === 'date'" class="flex items-center gap-2">
-                                            <span>{{ slotProps.option ? format(new Date(slotProps.option), 'yyyy-MM-dd') : null }}</span>
-                                        </div>
-                                        <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
-                                            <span>{{ formatPhoneNumber(slotProps.option) }}</span>
-                                        </div>
-                                        <div v-else class="flex items-center gap-2">
-                                            <span>{{ slotProps.option }}</span>
-                                        </div>
-                                    </template>
-                                    <template #footer>
-                                        <div class="flex justify-end p-2 border-t">
-                                            <button type="button" class="text-xs text-blue-500 hover:underline" @click.stop="clearFilter(item.key)">Xóa lọc</button>
-                                        </div>
-                                    </template>
-                                </MultiSelect>
-                            </div>
-                        </template>
-                    </Column>
-
-                    <Column :exportable="false" style="min-width: 12rem; height: 60px">
-                        <template #body="{ data }">
-                            <!-- Skeleton cho placeholder -->
-                            <div v-if="!data || data.isPlaceholder" class="flex items-center gap-2" style="height: 17px">
-                                <Skeleton width="2rem" height="2rem" class="rounded-full" />
-                                <Skeleton width="2rem" height="2rem" class="rounded-full" />
-                            </div>
-                            <!-- Action buttons -->
-                            <div v-else class="flex items-center gap-2">
-                                <Button icon="pi pi-pencil" outlined rounded size="small" @click="editProduct(data)" />
-                                <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="confirmDeleteProduct(data)" />
-                            </div>
-                        </template>
-                    </Column>
-                </DataTable>
+                    :filter-options="filterOptions"
+                    :columns="columns"
+                    :total-records="totalRecords"
+                    :lazy-loading="lazyLoading"
+                    :current-sort="currentSort"
+                    :is-mobile="isMobile"
+                    :is-admin="isAdmin"
+                    :lazy-params="lazyParams"
+                    scroll-height="flex"
+                    table-class="p-datatable-sm"
+                    :is-fullscreen="true"
+                    @sort="handleSort"
+                    @filter="handleFilter"
+                    @refresh="handleRefresh"
+                    @show-images="handleShowImages"
+                    @edit-product="handleEditProduct"
+                    @delete-product="handleDeleteProduct"
+                    @lazy-load="handleLazyLoad"
+                />
             </div>
         </Drawer>
     </div>
