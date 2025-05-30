@@ -23,3 +23,60 @@
         top: 100px;
     }
 }
+
+/* src/assets/layout/_utils.scss - Updated card styling for mobile */
+
+/* Utils */
+.clearfix:after {
+    content: ' ';
+    display: block;
+    clear: both;
+}
+
+.card {
+    background: var(--surface-card);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border-radius: var(--content-border-radius);
+
+    &:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* Mobile optimizations for cards */
+@media (max-width: 768px) {
+    .card {
+        padding: 1rem; /* Reduced from 2rem to 1rem */
+        margin-bottom: 1rem; /* Reduced margin */
+        border-radius: 0.5rem; /* Slightly smaller border radius */
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .card {
+        padding: 0.35rem; /* Even smaller padding */
+        margin-bottom: 0.5rem;
+        border-radius: 0.375rem;
+    }
+}
+
+.p-toast {
+    &.p-toast-top-right,
+    &.p-toast-top-left,
+    &.p-toast-top-center {
+        top: 100px;
+    }
+}
+
+/* Mobile toast adjustments */
+@media (max-width: 768px) {
+    .p-toast {
+        &.p-toast-top-right,
+        &.p-toast-top-left,
+        &.p-toast-top-center {
+            top: 80px; /* Adjust for smaller topbar */
+        }
+    }
+}

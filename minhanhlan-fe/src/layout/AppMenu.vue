@@ -1,3 +1,4 @@
+<!-- src/layout/AppMenu.vue - Updated to store menu data in store -->
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { authService } from '@/service/AuthService';
@@ -72,6 +73,9 @@ const fetchMenuData = async () => {
                 }))
             };
         });
+
+        // Store menu data in store for later use
+        menuStore.setMenuData(res.data);
 
         const firstProductRoute = productItems?.[0]?.items?.[0]?.to;
         if (firstProductRoute) {

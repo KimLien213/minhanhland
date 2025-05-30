@@ -5,12 +5,14 @@ import { authService } from '@/service/AuthService';
 import { productService } from '@/service/ProductService';
 import { socketService } from '@/service/SocketService';
 import { sortPreferencesService } from '@/service/SortPreferencesService';
+import { useMenuStore } from '@/stores/menuStore';
 import { FilterMatchMode } from '@primevue/core/api';
 import { format } from 'date-fns';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+const menuStore = useMenuStore();
 const socketCleanups = ref([]);
 const initialImages = ref([]);
 const pendingImages = ref([]);
@@ -85,6 +87,40 @@ const filters = ref({
     contactInfo: { value: null, matchMode: FilterMatchMode.IN },
     source: { value: null, matchMode: FilterMatchMode.IN },
     status: { value: null, matchMode: FilterMatchMode.IN }
+});
+const pageInfo = computed(() => {
+    // Lấy dữ liệu từ menu store
+    const menuData = menuStore.menuData || [];
+
+    let subdivisionName = '';
+    let apartmentTypeName = '';
+
+    // Tìm subdivision và apartment type từ menu data
+    for (const subdivisionItem of menuData) {
+        if (subdivisionItem.id === subdivision.value) {
+            subdivisionName = subdivisionItem.name;
+
+            // Tìm apartment type trong children
+            if (subdivisionItem.children) {
+                const apartmentTypeItem = subdivisionItem.children.find((child) => child.id === apartmentType.value);
+                if (apartmentTypeItem) {
+                    apartmentTypeName = apartmentTypeItem.name;
+                }
+            }
+            break;
+        }
+    }
+
+    return {
+        subdivisionName: subdivisionName || 'N/A',
+        apartmentTypeName: apartmentTypeName || 'N/A'
+    };
+});
+
+// Computed để tạo tiêu đề header
+const pageTitle = computed(() => {
+    const { subdivisionName, apartmentTypeName } = pageInfo.value;
+    return `${subdivisionName} - ${apartmentTypeName}`;
 });
 
 const columns = ref([]);
@@ -988,12 +1024,18 @@ const getColumnStyle = computed(() => {
 
 <template>
     <div>
-        <!-- <ConnectionStatus /> -->
         <div class="card">
-            <Toolbar class="mb-6">
+            <Toolbar class="mb-4 sm:mb-6">
                 <template #start>
-                    <Button label="Thêm" icon="pi pi-plus" severity="secondary" class="mr-2" @click="openNew" />
-                    <Button label="Xóa" icon="pi pi-trash" severity="secondary" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" />
+                    <div class="flex flex-wrap gap-2">
+                        <Button label="Thêm" icon="pi pi-plus" severity="secondary" size="small" @click="openNew" class="text-sm" />
+                        <Button label="Xóa" icon="pi pi-trash" severity="secondary" size="small" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" class="text-sm" />
+                    </div>
+                </template>
+                <template #end>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-surface-600 dark:text-surface-400 hidden sm:inline"> {{ selectedProducts?.length || 0 }} đã chọn </span>
+                    </div>
                 </template>
             </Toolbar>
 
@@ -1034,7 +1076,8 @@ const getColumnStyle = computed(() => {
                 </template>
                 <template #header>
                     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full">
-                        <div class="flex items-start gap-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="text-sm font-bold">{{ pageTitle }}</span>
                             <span class="text-sm font-bold">Tống số: {{ totalRecords }} căn hộ</span>
                         </div>
                         <div class="flex items-end gap-2">

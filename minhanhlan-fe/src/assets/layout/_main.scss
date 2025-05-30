@@ -11,3 +11,39 @@
     flex: 1 1 auto;
     padding-bottom: 2rem;
 }
+/* src/assets/layout/_main.scss - Updated for minimal mobile padding */
+.layout-main-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    justify-content: space-between;
+    padding: 6rem 2rem 0 2rem;
+    transition: margin-left var(--layout-section-transition-duration);
+}
+
+.layout-main {
+    flex: 1 1 auto;
+    padding-bottom: 2rem;
+}
+
+/* Mobile optimizations - Minimal padding */
+@media (max-width: 768px) {
+    .layout-main-container {
+        padding: 4.5rem 0.75rem 0 0.75rem; /* Reduced from 6rem 2rem to 4.5rem 0.75rem */
+    }
+
+    .layout-main {
+        padding-bottom: 1rem; /* Reduced from 2rem to 1rem */
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .layout-main-container {
+        padding: 4rem 0.5rem 0 0.5rem; /* Even more minimal for very small screens */
+    }
+
+    .layout-main {
+        padding-bottom: 0.75rem;
+    }
+}

@@ -199,3 +199,78 @@
         gap: 0.5rem;
     }
 }
+@media (max-width: 991px) {
+    .layout-topbar {
+        height: 3.5rem; /* Reduced from 4rem to 3.5rem for mobile */
+        padding: 0 1rem; /* Reduced from 2rem to 1rem */
+
+        .layout-topbar-logo-container {
+            width: auto;
+        }
+
+        .layout-topbar-logo {
+            font-size: 1.25rem; /* Slightly smaller font */
+            gap: 0.375rem; /* Reduced gap */
+            
+            img {
+                width: 2.5rem; /* Smaller logo on mobile */
+                height: auto;
+            }
+        }
+
+        .layout-menu-button {
+            margin-left: 0;
+            margin-right: 0.375rem; /* Reduced margin */
+            width: 2.25rem; /* Smaller button */
+            height: 2.25rem;
+        }
+
+        .layout-topbar-action {
+            width: 2.25rem; /* Smaller action buttons */
+            height: 2.25rem;
+            
+            i {
+                font-size: 1.125rem; /* Smaller icons */
+            }
+        }
+
+        .layout-topbar-menu-button {
+            display: inline-flex;
+        }
+
+        .layout-topbar-menu {
+            right: 1rem; /* Adjust for new padding */
+            top: 3.5rem; /* Adjust for new height */
+        }
+
+        .layout-topbar-actions {
+            gap: 0.5rem; /* Reduced gap between actions */
+        }
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .layout-topbar {
+        height: 3.25rem; /* Even smaller for very small screens */
+        padding: 0 0.75rem;
+
+        .layout-topbar-logo {
+            font-size: 1.125rem;
+            
+            img {
+                width: 2.25rem;
+            }
+        }
+
+        .layout-topbar-action,
+        .layout-menu-button {
+            width: 2rem;
+            height: 2rem;
+            
+            i {
+                font-size: 1rem;
+            }
+        }
+    }
+}
