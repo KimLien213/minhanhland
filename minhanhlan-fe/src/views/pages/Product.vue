@@ -1269,17 +1269,7 @@ const getColumnStyle = computed(() => {
                     <small v-if="errors.status" class="text-red-500">{{ errors.status }}</small>
                 </div>
             </form>
-            <MobilePasteFileUpload
-                :initial-files="initialImages"
-                :multiple="true"
-                :max-file-size="5000000"
-                accept="image/*"
-                label="Hình ảnh căn hộ"
-                @files-updated="onFilesUpdated"
-                @file-removed="onFileRemoved"
-                @paste-success="onPasteSuccess"
-                @paste-error="onPasteError"
-            />
+            <MobilePasteFileUpload :initial-files="initialImages" :multiple="true" :max-file-size="5000000" accept="image/*" @files-updated="onFilesUpdated" @file-removed="onFileRemoved" @paste-success="onPasteSuccess" @paste-error="onPasteError" />
 
             <template #footer>
                 <Button label="Hủy" icon="pi pi-times" text @click="productDialog = false" />

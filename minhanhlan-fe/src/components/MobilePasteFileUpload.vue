@@ -1,64 +1,10 @@
 <template>
-    <div class="mobile-paste-file-upload" ref="pasteZoneRef">
-        <!-- iOS Direct Paste Zone -->
-        <div v-if="isMobile && showPasteZone" class="mb-4 p-4 border-2 border-dashed rounded-lg transition-all duration-300" :class="isPasteZoneActive ? 'border-blue-500 bg-blue-50 paste-zone-active' : 'border-gray-300 bg-gray-50'">
-            <div class="flex flex-col items-center justify-center text-center">
-                <i class="pi pi-clipboard text-2xl mb-2" :class="isPasteZoneActive ? 'text-blue-500' : 'text-gray-500'"></i>
-                <p class="text-sm font-medium" :class="isPasteZoneActive ? 'text-blue-700' : 'text-gray-600'">
-                    {{ pasteZoneMessage }}
-                </p>
-            </div>
-        </div>
-
-        <!-- iOS Optimized Paste Button -->
-        <div v-if="isMobile" class="mb-4 flex gap-2">
-            <!-- Direct paste area that user can interact with -->
-            <div class="relative flex-1">
-                <textarea
-                    ref="pasteInputRef"
-                    v-model="pasteText"
-                    placeholder="Nhấn và giữ để dán ảnh..."
-                    class="w-full p-3 border border-gray-300 rounded-lg text-sm resize-none"
-                    :class="isPasteZoneActive ? 'border-blue-500 bg-blue-50' : ''"
-                    rows="2"
-                    @paste="onDirectPaste"
-                    @focus="onPasteFocus"
-                    @blur="onPasteBlur"
-                    @touchstart="onTouchStart"
-                />
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div v-if="!pasteText" class="flex items-center gap-2 text-gray-500">
-                        <i class="pi pi-clipboard"></i>
-                        <span class="text-sm">{{ isIOS ? 'Nhấn giữ → Paste' : 'Long press → Paste' }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Camera button -->
-            <Button @click="openCamera" icon="pi pi-camera" outlined severity="secondary" v-tooltip.top="'Chụp ảnh'" class="h-fit" />
-        </div>
-
-        <!-- Alternative method for iOS -->
-        <div v-if="isIOS" class="mb-4 p-3 bg-blue-50 rounded-lg">
-            <div class="flex items-start gap-3">
-                <i class="pi pi-info-circle text-blue-500 mt-0.5"></i>
-                <div class="text-sm text-blue-700">
-                    <p class="font-medium mb-1">📱 Cách dán ảnh trên iPhone:</p>
-                    <ol class="list-decimal list-inside space-y-1 text-xs">
-                        <li>Copy ảnh từ Photos hoặc chụp ảnh mới</li>
-                        <li>Nhấn vào ô text trên</li>
-                        <li>Nhấn và giữ → chọn "Paste"</li>
-                        <li>Ảnh sẽ tự động được thêm vào danh sách</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-
+    <div class="mobile-paste-file-upload mt-2" ref="pasteZoneRef" @paste="onDirectPaste">
         <!-- Hidden file input for camera -->
         <input ref="cameraInputRef" type="file" accept="image/*" capture="environment" class="hidden" @change="onCameraCapture" multiple />
 
-        <!-- Hidden input for legacy paste support -->
-        <input ref="hiddenInputRef" type="text" class="absolute opacity-0 pointer-events-none w-1 h-1 -left-full" @paste="onHiddenPaste" />
+        <!-- Hidden input for paste support -->
+        <input ref="hiddenInputRef" type="text" class="absolute opacity-0 pointer-events-none w-1 h-1 -left-full" @paste="onDirectPaste" />
 
         <FileUpload ref="fileUploadRef" v-bind="$attrs" :multiple="multiple" :accept="accept" :maxFileSize="maxFileSize" @select="onSelectedFiles">
             <template #header="{ chooseCallback, uploadCallback, clearCallback, files }">
@@ -69,8 +15,11 @@
                             <Button @click="chooseCallback()" icon="pi pi-images" rounded outlined severity="secondary" v-tooltip.top="'Chọn file'"></Button>
                         </slot>
 
-                        <!-- Legacy paste button as fallback -->
-                        <Button @click="focusHiddenInput" icon="pi pi-clipboard" rounded outlined severity="info" v-tooltip.top="'Paste (fallback)'" />
+                        <!-- Camera button for mobile -->
+                        <Button v-if="isMobile" @click="openCamera" icon="pi pi-camera" rounded outlined severity="secondary" v-tooltip.top="'Chụp ảnh'" />
+
+                        <!-- Paste button -->
+                        <Button @click="triggerPaste" icon="pi pi-clipboard" rounded outlined severity="info" v-tooltip.top="'Dán ảnh'" />
                     </div>
                 </div>
             </template>
@@ -90,8 +39,9 @@
                     <div class="flex items-center justify-center flex-col py-8 text-center">
                         <i class="pi pi-cloud-upload !border-2 !rounded-full !p-5 !text-4xl !text-muted-color mb-4" />
                         <p class="mb-2 font-medium">
-                            {{ isMobile ? 'Chọn ảnh, chụp ảnh mới hoặc dán vào ô trên' : 'Kéo hoặc paste ảnh vào đây' }}
+                            {{ isMobile ? 'Chọn ảnh, chụp ảnh hoặc copy ảnh từ Photos rồi nhấn nút Dán' : 'Kéo hoặc paste ảnh vào đây' }}
                         </p>
+                        <p v-if="isMobile" class="text-sm text-gray-500 mt-2">💡 Mẹo: Copy ảnh từ ứng dụng Photos → Mở browser → Nhấn nút Dán</p>
                     </div>
                 </slot>
             </template>
@@ -103,17 +53,16 @@
         </FileUpload>
 
         <!-- Success/Error Toast equivalent -->
-        <div v-if="showFeedback" class="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all" :class="feedbackClass">
-            <div class="flex items-center gap-2">
-                <i :class="feedbackIcon"></i>
-                <span>{{ feedbackMessage }}</span>
+        <div v-if="showFeedback" class="fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all max-w-sm" :class="feedbackClass">
+            <div class="flex items-start gap-2">
+                <i :class="feedbackIcon" class="mt-0.5"></i>
+                <span class="whitespace-pre-line text-sm">{{ feedbackMessage }}</span>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 // Props
@@ -122,8 +71,6 @@ const props = defineProps({
     accept: { type: String, default: 'image/*' },
     maxFileSize: { type: Number, default: 5000000 },
     label: { type: String, default: 'Hình ảnh' },
-    showPasteZone: { type: Boolean, default: true },
-    showInstructions: { type: Boolean, default: true },
     initialFiles: { type: Array, default: () => [] },
     baseUrl: { type: String, default: import.meta.env.VITE_API_URL }
 });
@@ -132,20 +79,14 @@ const props = defineProps({
 const emit = defineEmits(['files-updated', 'file-added', 'file-removed', 'paste-success', 'paste-error']);
 
 // Refs
-const toast = useToast();
 const fileUploadRef = ref(null);
 const pasteZoneRef = ref(null);
-const pasteInputRef = ref(null);
 const hiddenInputRef = ref(null);
 const cameraInputRef = ref(null);
 
 // State
 const isMobile = ref(false);
-const isIOS = ref(false);
-const isPasteZoneActive = ref(false);
-const pasteZoneMessage = ref('Dán ảnh vào ô bên dưới');
 const currentFiles = ref([]);
-const pasteText = ref('');
 
 // Feedback system
 const showFeedback = ref(false);
@@ -169,7 +110,7 @@ const mergedFileList = computed(() => {
     const initial = (props.initialFiles || []).map((file, idx) => ({
         ...file,
         url: file.url.startsWith('http') ? file.url : props.baseUrl + file.url,
-        key: `initial-${file.id || file.url}`,
+        key: `initial-${file.id || file.url}-${idx}`,
         type: 'initial',
         index: idx
     }));
@@ -177,7 +118,7 @@ const mergedFileList = computed(() => {
     const pending = (currentFiles.value || []).map((file, idx) => ({
         ...file,
         url: file.objectURL || URL.createObjectURL(file),
-        key: `pending-${file.name + file.size}`,
+        key: `pending-${file.name}-${file.size}-${idx}`,
         type: 'pending',
         index: idx
     }));
@@ -188,21 +129,19 @@ const mergedFileList = computed(() => {
 // Device detection
 const detectDevice = () => {
     const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-
     isMobile.value = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-    isIOS.value = /iPad|iPhone|iPod/.test(userAgent);
-
-    console.log('Device detected:', { isMobile: isMobile.value, isIOS: isIOS.value });
 };
 
-// Direct paste handling from textarea
+// Paste handling
 const onDirectPaste = async (event) => {
-    console.log('Direct paste event triggered');
+    console.log('Paste event triggered');
     event.preventDefault();
+    event.stopPropagation();
 
     const items = event.clipboardData?.items;
     if (!items) {
         console.log('No clipboard items found');
+        showErrorFeedback('Không tìm thấy nội dung trong clipboard');
         return;
     }
 
@@ -226,9 +165,6 @@ const onDirectPaste = async (event) => {
             await handlePastedFile(file);
         }
         showSuccessFeedback(`Đã thêm ${newFiles.length} ảnh`);
-
-        // Clear the textarea
-        pasteText.value = '';
     } else {
         // Check if there's text content that might be an image URL
         const text = event.clipboardData.getData('text');
@@ -236,13 +172,108 @@ const onDirectPaste = async (event) => {
             try {
                 await handleImageUrl(text);
                 showSuccessFeedback('Đã thêm ảnh từ URL');
-                pasteText.value = '';
             } catch (error) {
                 showErrorFeedback('Không thể tải ảnh từ URL');
             }
         } else {
             showErrorFeedback('Không tìm thấy ảnh trong clipboard');
         }
+    }
+};
+
+// Trigger paste manually
+const triggerPaste = async () => {
+    try {
+        // Đặc biệt cho Safari: thử method cũ trước
+        if (isMobile.value && /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
+            console.log('Safari mobile detected, using alternative method');
+
+            // Method 1: Focus hidden input và prompt user
+            if (hiddenInputRef.value) {
+                hiddenInputRef.value.focus();
+                hiddenInputRef.value.select();
+
+                // Thử trigger paste event thủ công
+                try {
+                    const success = document.execCommand('paste');
+                    if (!success) {
+                        showInfoFeedback('Vui lòng:\n1. Nhấn giữ vào ô input\n2. Chọn "Paste"\n3. Hoặc sử dụng nút Chọn ảnh');
+                        return;
+                    }
+                } catch (e) {
+                    showInfoFeedback('Vui lòng:\n1. Nhấn giữ vào ô input\n2. Chọn "Paste"\n3. Hoặc sử dụng nút Chọn ảnh');
+                    return;
+                }
+            }
+            return;
+        }
+
+        // Kiểm tra Clipboard API availability
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+            if (isMobile.value) {
+                showInfoFeedback('Trình duyệt không hỗ trợ dán tự động.\nVui lòng sử dụng nút "Chọn ảnh"');
+            } else {
+                // Focus hidden input cho desktop
+                if (hiddenInputRef.value) {
+                    hiddenInputRef.value.focus();
+                    hiddenInputRef.value.select();
+                }
+                showInfoFeedback('Vui lòng nhấn Ctrl+V để dán');
+            }
+            return;
+        }
+
+        // Kiểm tra permission
+        try {
+            const permission = await navigator.permissions.query({ name: 'clipboard-read' });
+            console.log('Clipboard permission:', permission.state);
+
+            if (permission.state === 'denied') {
+                showInfoFeedback('Quyền truy cập clipboard bị từ chối.\nVui lòng sử dụng nút "Chọn ảnh"');
+                return;
+            }
+        } catch (permError) {
+            console.log('Permission API not available');
+        }
+
+        // Thử đọc clipboard
+        try {
+            const clipboardItems = await navigator.clipboard.read();
+
+            let foundImage = false;
+            for (const clipboardItem of clipboardItems) {
+                for (const type of clipboardItem.types) {
+                    if (type.startsWith('image/')) {
+                        foundImage = true;
+                        const blob = await clipboardItem.getType(type);
+                        const file = new File([blob], `pasted-image-${Date.now()}.${type.split('/')[1]}`, { type });
+                        await handlePastedFile(file);
+                        showSuccessFeedback('Đã dán ảnh thành công');
+                        return;
+                    }
+                }
+            }
+
+            if (!foundImage) {
+                showInfoFeedback('Không có ảnh trong clipboard.\nHãy copy ảnh từ Photos trước khi dán');
+            }
+        } catch (clipboardError) {
+            console.log('Clipboard read error:', clipboardError);
+
+            // Fallback: hướng dẫn theo platform
+            if (isMobile.value) {
+                showInfoFeedback('Không thể đọc clipboard tự động.\n\nCách khác:\n1. Sử dụng nút "Chọn ảnh"\n2. Hoặc refresh trang và thử lại');
+            } else {
+                if (hiddenInputRef.value) {
+                    hiddenInputRef.value.focus();
+                    hiddenInputRef.value.select();
+                }
+                showInfoFeedback('Vui lòng nhấn Ctrl+V để dán');
+            }
+        }
+    } catch (error) {
+        console.error('Paste trigger error:', error);
+        showErrorFeedback('Lỗi khi dán. Vui lòng sử dụng nút "Chọn ảnh"');
     }
 };
 
@@ -269,45 +300,6 @@ const handleImageUrl = async (url) => {
     } catch (error) {
         throw error;
     }
-};
-
-// Legacy paste handling
-const onHiddenPaste = (event) => {
-    console.log('Hidden paste triggered');
-    onDirectPaste(event);
-};
-
-const focusHiddenInput = () => {
-    if (hiddenInputRef.value) {
-        hiddenInputRef.value.focus();
-        hiddenInputRef.value.select();
-
-        // Try to trigger paste programmatically
-        document.execCommand('paste');
-
-        showInfoFeedback('Nhấn Ctrl+V để paste');
-    }
-};
-
-// Touch events
-const onTouchStart = (event) => {
-    console.log('Touch start on paste area');
-    // Optional: Add haptic feedback for iOS
-    if (isIOS.value && navigator.vibrate) {
-        navigator.vibrate(50);
-    }
-};
-
-const onPasteFocus = () => {
-    isPasteZoneActive.value = true;
-    pasteZoneMessage.value = 'Sẵn sàng nhận ảnh từ clipboard';
-};
-
-const onPasteBlur = () => {
-    setTimeout(() => {
-        isPasteZoneActive.value = false;
-        pasteZoneMessage.value = 'Dán ảnh vào ô bên dưới';
-    }, 100);
 };
 
 // Camera functionality
@@ -352,53 +344,66 @@ const handlePastedFile = async (file) => {
         file.objectURL = URL.createObjectURL(file);
     }
 
-    // Add to current files
-    currentFiles.value.push(file);
+    // Add to current files array
+    currentFiles.value = [...currentFiles.value, file];
 
-    // Update FileUpload component
-    if (fileUploadRef.value?.files) {
-        fileUploadRef.value.files.push(file);
-    }
+    // Sync with FileUpload component
+    syncWithFileUpload();
 
     // Emit events
     emit('file-added', file);
-    emit('files-updated', {
-        all: mergedFileList.value,
-        pending: currentFiles.value,
-        initial: props.initialFiles
-    });
+    emitFilesUpdated();
 
     console.log('File added successfully');
 };
 
 const onSelectedFiles = (event) => {
+    console.log('Files selected from FileUpload:', event.files);
     if (event.files) {
+        // Replace current files with selected files
         currentFiles.value = [...event.files];
-        emit('files-updated', {
-            all: mergedFileList.value,
-            pending: currentFiles.value,
-            initial: props.initialFiles
-        });
+        emitFilesUpdated();
+    }
+};
+
+const syncWithFileUpload = () => {
+    // Sync current files with FileUpload component
+    if (fileUploadRef.value) {
+        fileUploadRef.value.files = [...currentFiles.value];
     }
 };
 
 const handleRemoveFile = (file) => {
+    console.log('Removing file:', file);
+
     if (file.type === 'initial') {
         emit('file-removed', { file, type: 'initial' });
     } else if (file.type === 'pending') {
-        currentFiles.value = currentFiles.value.filter((f) => f.objectURL !== file.url);
+        // Remove from current files
+        currentFiles.value = currentFiles.value.filter((f, index) => {
+            const fileKey = `pending-${f.name}-${f.size}-${index}`;
+            return fileKey !== file.key;
+        });
 
-        if (file.url.startsWith('blob:')) {
+        // Revoke object URL if exists
+        if (file.url && file.url.startsWith('blob:')) {
             URL.revokeObjectURL(file.url);
         }
 
+        // Sync with FileUpload component
+        syncWithFileUpload();
+
         emit('file-removed', { file, type: 'pending' });
-        emit('files-updated', {
-            all: mergedFileList.value,
-            pending: currentFiles.value,
-            initial: props.initialFiles
-        });
+        emitFilesUpdated();
     }
+};
+
+const emitFilesUpdated = () => {
+    emit('files-updated', {
+        all: mergedFileList.value,
+        pending: currentFiles.value,
+        initial: props.initialFiles
+    });
 };
 
 // Feedback system
@@ -433,19 +438,20 @@ const showInfoFeedback = (message) => {
 
     setTimeout(() => {
         showFeedback.value = false;
-    }, 3000);
+    }, 5000); // Longer duration for instructions
 };
 
 // Global paste listener
 const onGlobalPaste = (event) => {
-    // Only handle if not focused on our inputs
-    if (event.target !== pasteInputRef.value && event.target !== hiddenInputRef.value) {
+    // Only handle if target is document body or our component
+    if (event.target === document.body || pasteZoneRef.value?.contains(event.target)) {
         onDirectPaste(event);
     }
 };
 
 // Public methods
 const clearFiles = () => {
+    // Revoke all object URLs
     currentFiles.value.forEach((file) => {
         if (file.objectURL && file.objectURL.startsWith('blob:')) {
             URL.revokeObjectURL(file.objectURL);
@@ -453,17 +459,12 @@ const clearFiles = () => {
     });
 
     currentFiles.value = [];
-    pasteText.value = '';
 
     if (fileUploadRef.value) {
         fileUploadRef.value.clear();
     }
 
-    emit('files-updated', {
-        all: mergedFileList.value,
-        pending: currentFiles.value,
-        initial: props.initialFiles
-    });
+    emitFilesUpdated();
 };
 
 const getFiles = () => {
@@ -478,15 +479,12 @@ const getFiles = () => {
 watch(
     () => props.initialFiles,
     (newFiles) => {
-        if (newFiles && newFiles.length > 0) {
+        if (newFiles !== undefined) {
+            // Reset current files when initial files change
             currentFiles.value = [];
 
             nextTick(() => {
-                emit('files-updated', {
-                    all: mergedFileList.value,
-                    pending: currentFiles.value,
-                    initial: newFiles
-                });
+                emitFilesUpdated();
             });
         }
     },
@@ -503,23 +501,29 @@ onMounted(() => {
     // Add keyboard shortcuts
     const handleKeyDown = (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-            if (pasteInputRef.value && document.activeElement !== pasteInputRef.value) {
-                event.preventDefault();
-                pasteInputRef.value.focus();
+            // Don't interfere if user is typing in an input
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                return;
             }
+
+            event.preventDefault();
+            triggerPaste();
         }
     };
 
     document.addEventListener('keydown', handleKeyDown);
-});
 
-onUnmounted(() => {
-    document.removeEventListener('paste', onGlobalPaste);
+    // Store cleanup function
+    onUnmounted(() => {
+        document.removeEventListener('paste', onGlobalPaste);
+        document.removeEventListener('keydown', handleKeyDown);
 
-    currentFiles.value.forEach((file) => {
-        if (file.objectURL && file.objectURL.startsWith('blob:')) {
-            URL.revokeObjectURL(file.objectURL);
-        }
+        // Cleanup object URLs
+        currentFiles.value.forEach((file) => {
+            if (file.objectURL && file.objectURL.startsWith('blob:')) {
+                URL.revokeObjectURL(file.objectURL);
+            }
+        });
     });
 });
 
@@ -528,40 +532,11 @@ defineExpose({
     clearFiles,
     getFiles,
     openCamera,
-    focusHiddenInput
+    triggerPaste
 });
 </script>
 
 <style scoped>
-/* Enhanced paste zone styles */
-.paste-zone-active {
-    animation: pulse-border 2s infinite;
-}
-
-@keyframes pulse-border {
-    0%,
-    100% {
-        border-color: #3b82f6;
-        background-color: #eff6ff;
-    }
-    50% {
-        border-color: #1d4ed8;
-        background-color: #dbeafe;
-    }
-}
-
-/* Paste textarea specific styles */
-.paste-textarea {
-    font-family: system-ui, -apple-system, sans-serif;
-    -webkit-appearance: none;
-    -webkit-tap-highlight-color: transparent;
-}
-
-.paste-textarea:focus {
-    outline: 2px solid #3b82f6;
-    outline-offset: -2px;
-}
-
 /* File preview improvements */
 .file-preview-container {
     transition: transform 0.2s ease;
