@@ -1,5 +1,6 @@
 <script setup>
 import FullscreenImageGallery from '@/components/galeria/FullscreenImageGallery.vue';
+import MobilePasteFileUpload from '@/components/MobilePasteFileUpload.vue';
 import { authService } from '@/service/AuthService';
 import { productService } from '@/service/ProductService';
 import { socketService } from '@/service/SocketService';
@@ -11,6 +12,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute } from 'vue-router';
 
 const socketCleanups = ref([]);
+const initialImages = ref([]);
+const pendingImages = ref([]);
 const productDialog = ref(false);
 const deleteProductDialog = ref(false);
 const deleteProductsDialog = ref(false);
@@ -620,8 +623,6 @@ const validateForm = () => {
     return Object.values(errors).every((e) => !e);
 };
 
-const files = ref([]);
-
 const onFilter = () => {
     // Chỉ filter khi đã khởi tạo
     if (!isInitialized.value) return;
@@ -657,8 +658,15 @@ async function submit() {
         data.append(key, value || '');
     }
 
-    files.value.forEach((f) => data.append('images', f));
-    form.value.imageList?.forEach((f) => data.append('imageIds', f.id));
+    // Add pending files
+    pendingImages.value.forEach((file) => {
+        data.append('images', file);
+    });
+
+    // Add initial image IDs (for updates)
+    initialImages.value.forEach((img) => {
+        data.append('imageIds', img.id);
+    });
     try {
         if (!form.value.id) {
             await productService.create(data);
@@ -703,6 +711,8 @@ function openNew() {
         status: 'DANG_BAN'
     };
     submitted.value = false;
+    initialImages.value = [];
+    pendingImages.value = [];
     productDialog.value = true;
 }
 
@@ -711,11 +721,12 @@ function hideDialog() {
     submitted.value = false;
 }
 
-function editProduct(prod) {
+const editProduct = (prod) => {
     form.value = { ...prod };
-    files.value = [];
+    initialImages.value = prod.imageList || [];
+    pendingImages.value = [];
     productDialog.value = true;
-}
+};
 
 function confirmDeleteProduct(prod) {
     product.value = prod;
@@ -906,25 +917,29 @@ const onPaste = (event) => {
     }
 };
 
-const mergedImageList = computed(() => {
-    const initial = (form.value?.imageList || []).map((file, idx) => ({
-        ...file,
-        url: import.meta.env.VITE_API_URL + file.url,
-        key: `initial-${file.url}`,
-        type: 'initial',
-        index: idx
-    }));
+// Handle file events từ component
+const onFilesUpdated = (data) => {
+    pendingImages.value = data.pending;
+    // data.all chứa tất cả files (initial + pending)
+    // data.initial chứa files ban đầu
+    // data.pending chứa files mới thêm
+};
 
-    const pending = files.value?.map((file, idx) => ({
-        ...file,
-        url: file.objectURL,
-        key: `pending-${file.name + file.size}`,
-        type: 'pending',
-        index: idx
-    }));
+const onFileRemoved = (data) => {
+    if (data.type === 'initial') {
+        // Remove from initial files
+        initialImages.value = initialImages.value.filter((img) => img.id !== data.file.id);
+    }
+    // Pending files đã được handle tự động trong component
+};
 
-    return [...initial, ...pending];
-});
+const onPasteSuccess = (data) => {
+    console.log(`${data.count} ảnh đã được paste thành công`);
+};
+
+const onPasteError = (data) => {
+    console.error('Paste error:', data.message);
+};
 
 const handleRemoveImage = (file) => {
     if (file.type === 'initial') {
@@ -1254,37 +1269,17 @@ const getColumnStyle = computed(() => {
                     <small v-if="errors.status" class="text-red-500">{{ errors.status }}</small>
                 </div>
             </form>
-
-            <div class="card !px-0" @paste="onPaste">
-                <FileUpload ref="fileUploadRef" :multiple="true" accept="image/*" :maxFileSize="1000000" @select="onSelectedFiles">
-                    <template #header="{ chooseCallback }">
-                        <div class="flex items-center justify-between mb-2 w-full">
-                            <label class="font-bold">Hình ảnh</label>
-                            <div class="flex gap-2">
-                                <Button @click="chooseCallback()" icon="pi pi-images" rounded outlined severity="secondary"></Button>
-                            </div>
-                        </div>
-                    </template>
-                    <template #content>
-                        <div class="flex flex-wrap gap-4">
-                            <div v-for="file of mergedImageList" :key="file.key" class="relative w-[100px] h-[80px] rounded-lg border border-surface overflow-hidden flex-shrink-0">
-                                <div class="relative rounded-lg border border-surface overflow-hidden flex-shrink-0">
-                                    <button @click="handleRemoveImage(file)" class="absolute top-0 right-0 w-6 h-6 text-red-500 flex items-center justify-center z-10 hover:bg-red-100">
-                                        <i class="pi pi-times text-xs"></i>
-                                    </button>
-
-                                    <Image :src="file.url" :alt="file.name" preview class="w-full h-full" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-center flex-col">
-                            <i class="pi pi-cloud-upload !border-2 !rounded-full !p-5 !text-4xl !text-muted-color" />
-                            <p class="mt-6 mb-0">Kéo hoặc paste ảnh vào đây.</p>
-                        </div>
-                    </template>
-                </FileUpload>
-            </div>
+            <MobilePasteFileUpload
+                :initial-files="initialImages"
+                :multiple="true"
+                :max-file-size="5000000"
+                accept="image/*"
+                label="Hình ảnh căn hộ"
+                @files-updated="onFilesUpdated"
+                @file-removed="onFileRemoved"
+                @paste-success="onPasteSuccess"
+                @paste-error="onPasteError"
+            />
 
             <template #footer>
                 <Button label="Hủy" icon="pi pi-times" text @click="productDialog = false" />
