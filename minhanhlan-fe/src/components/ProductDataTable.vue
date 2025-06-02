@@ -4,7 +4,8 @@
         :value="virtualProducts"
         dataKey="id"
         size="small"
-        v-model:selection="selectedProducts"
+        :selection="selectedProducts"
+        @update:selection="$emit('update:selectedProducts', $event)"
         :filters="filters"
         resizableColumns
         columnResizeMode="expand"
@@ -216,7 +217,7 @@ const props = defineProps({
     isMobile: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     lazyParams: { type: Object, required: true },
-    scrollHeight: { type: String, default: '600px' },
+    scrollHeight: { type: String, default: 'flex' },
     tableClass: { type: String, default: '' },
     isFullscreen: { type: Boolean, default: false }
 });
