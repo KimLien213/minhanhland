@@ -30,11 +30,35 @@ export class MasterDataRepository {
   }
 
   async findAll(dto: PaginationDto) {
+    // Nếu không có search thì lấy tất cả dữ liệu
+    if (!dto.search) {
+      const allData = await this.repo.find({
+        where: { parentId: null }, // Chỉ lấy parent records
+        relations: ['children'],
+        order: {
+          order: 'ASC',
+          children: {
+            order: 'ASC'
+          }
+        }
+      });
+
+      return {
+        data: allData,
+        meta: {
+          page: 1,
+          limit: allData.length,
+          total: allData.length
+        }
+      };
+    }
+
+    // Nếu có search thì dùng pagination như cũ
     const query = this.repo.createQueryBuilder('md')
-      .leftJoinAndSelect('md.children', 'children') // Chỉ cần load children, không cần parent
-      .where('md.parentId IS NULL') // Chỉ lấy parent records
-      .orderBy('md.name', 'ASC')
-      .addOrderBy('children.name', 'ASC');
+      .leftJoinAndSelect('md.children', 'children')
+      .where('md.parentId IS NULL')
+      .orderBy('md.order', 'ASC')
+      .addOrderBy('children.order', 'ASC');
 
     return paginate(query, dto, ['md.name', 'children.name']);
   }
@@ -51,12 +75,30 @@ export class MasterDataRepository {
     data: Partial<MasterDataEntity>,
   ): Promise<MasterDataEntity | null> {
     await this.repo.update(id, data);
-    return this.repo.findOne({ where: { id } });
+    return this.repo.findOne({ 
+      where: { id },
+      relations: ['children']
+    });
   }
 
   async updateOrder(id: string, newOrder: number): Promise<boolean> {
     const result = await this.repo.update(id, { order: newOrder });
     return result.affected > 0;
+  }
+
+  // Thêm method để update order cho nhiều items cùng lúc
+  async updateMultipleOrders(orderUpdates: { id: string; order: number }[]): Promise<boolean> {
+    try {
+      await this.repo.manager.transaction(async (manager) => {
+        for (const update of orderUpdates) {
+          await manager.update(MasterDataEntity, update.id, { order: update.order });
+        }
+      });
+      return true;
+    } catch (error) {
+      console.error('Error updating multiple orders:', error);
+      return false;
+    }
   }
 
   async getMaxOrder(parentId?: string): Promise<number> {
@@ -75,12 +117,15 @@ export class MasterDataRepository {
     return result?.maxOrder || 0;
   }
 
-  async deleteMasterData(id: number): Promise<boolean> {
+  async deleteMasterData(id: string): Promise<boolean> {
     const result = await this.repo.delete(id);
     return result.affected > 0;
   }
 
   async findById(id: string): Promise<MasterDataEntity> {
-    return this.repo.findOneBy({ id });
+    return this.repo.findOne({
+      where: { id },
+      relations: ['children']
+    });
   }
 }

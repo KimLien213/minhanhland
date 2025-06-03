@@ -1,11 +1,16 @@
 // src/master-data/master-data.service.ts
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateMasterDataDto } from './dto/create-master-data.dto';
 import { UpdateMasterDataDto } from './dto/update-master-data.dto';
 import { MasterDataResponseDto } from './dto/master-data-response.dto';
 import { MasterDataRepository } from './repositories/master-data.repository';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { MasterDataType } from 'src/common/enums';
+
+interface OrderUpdateDto {
+  id: string;
+  order: number;
+}
 
 @Injectable()
 export class MasterDataService {
@@ -43,7 +48,17 @@ export class MasterDataService {
     return this.masterDataRepository.updateOrder(id, newOrder);
   }
 
-  async delete(id: number): Promise<boolean> {
+  // Thêm method để update order cho parent items
+  async updateParentOrders(orderUpdates: OrderUpdateDto[]): Promise<boolean> {
+    return this.masterDataRepository.updateMultipleOrders(orderUpdates);
+  }
+
+  // Thêm method để update order cho children items
+  async updateChildrenOrders(parentId: string, orderUpdates: OrderUpdateDto[]): Promise<boolean> {
+    return this.masterDataRepository.updateMultipleOrders(orderUpdates);
+  }
+
+  async delete(id: string): Promise<boolean> {
     return this.masterDataRepository.deleteMasterData(id);
   }
 
