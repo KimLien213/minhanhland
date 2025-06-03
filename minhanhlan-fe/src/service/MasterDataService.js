@@ -1,4 +1,4 @@
-import axiosInstance from '@/plugin/axios';
+import axiosInstance from "@/plugin/axios";
 
 export const masterDataService = {
     getAllNoPaging() {
@@ -15,5 +15,9 @@ export const masterDataService = {
     },
     remove(id) {
         return axiosInstance.delete(`/master-data/${id}`);
+    },
+    // Thêm method mới cho reorder
+    reorder(items) {
+        return axiosInstance.put('/master-data/reorder', { items });
     }
 };

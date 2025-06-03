@@ -1,3 +1,4 @@
+// master-data.controller.ts - Cập nhật imports và thêm endpoint
 import {
   Body,
   Controller,
@@ -12,6 +13,7 @@ import {
 import { MasterDataService } from './master-data.service';
 import { CreateMasterDataDto } from './dto/create-master-data.dto';
 import { UpdateMasterDataDto } from './dto/update-master-data.dto';
+import { ReorderMasterDataDto } from './dto/reorder-master-data.dto'; // Import mới
 import { MasterDataResponseDto } from './dto/master-data-response.dto';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { MasterDataType } from 'src/common/enums';
@@ -21,6 +23,7 @@ import { AuthGuard } from '@nestjs/passport';
 @Controller('master-data')
 export class MasterDataController {
   constructor(private readonly masterDataService: MasterDataService) {}
+  
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.masterDataService.findAll(query);
@@ -36,6 +39,13 @@ export class MasterDataController {
     @Body() body: CreateMasterDataDto,
   ): Promise<MasterDataResponseDto> {
     return this.masterDataService.create(body);
+  }
+
+  @Put('reorder') // Đặt trước :id để tránh conflict
+  async reorder(
+    @Body() body: ReorderMasterDataDto,
+  ): Promise<{ success: boolean }> {
+    return this.masterDataService.reorder(body);
   }
 
   @Put(':id')

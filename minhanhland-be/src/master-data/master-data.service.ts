@@ -5,6 +5,7 @@ import { MasterDataResponseDto } from './dto/master-data-response.dto';
 import { MasterDataRepository } from './repositories/master-data.repository';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { MasterDataType } from 'src/common/enums';
+import { ReorderMasterDataDto } from './dto/reorder-master-data.dto';
 
 @Injectable()
 export class MasterDataService {
@@ -25,6 +26,14 @@ export class MasterDataService {
     return new MasterDataResponseDto(entity);
   }
 
+async reorder(data: ReorderMasterDataDto): Promise<{ success: boolean }> {
+  try {
+    await this.masterDataRepository.updateOrder(data.items);
+    return { success: true };
+  } catch (error) {
+    throw new ConflictException('Không thể cập nhật thứ tự');
+  }
+}
   async update(
     id: string,
     data: UpdateMasterDataDto,
