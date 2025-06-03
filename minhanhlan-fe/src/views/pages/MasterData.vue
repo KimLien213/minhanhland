@@ -22,15 +22,14 @@ const fetchData = async () => {
     loading.value = true;
     try {
         const res = await masterDataService.getAll(lazyParams.value);
-        console.log('API Response:', res.data); // Debug log
+        console.log('API Response:', res.data);
 
-        // Không cần transform nữa vì backend đã trả về đúng structure
         masterDataList.value = res.data.data;
         totalRecords.value = res.data.meta.total;
 
-        console.log('Master Data List:', masterDataList.value); // Debug log
+        console.log('Master Data List:', masterDataList.value);
     } catch (err) {
-        console.error('Fetch error:', err); // Debug log
+        console.error('Fetch error:', err);
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được dữ liệu' });
     } finally {
         loading.value = false;
@@ -42,7 +41,7 @@ const fetchBuilding = async () => {
     try {
         const res = await masterDataService.getAllNoPaging();
         buildings.value = res.data;
-        console.log('Buildings:', buildings.value); // Debug log
+        console.log('Buildings:', buildings.value);
     } catch (err) {
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được dữ liệu' });
     }
@@ -121,83 +120,99 @@ const deleteSelectedItems = async () => {
     }
 };
 
-// Reorder functions for parent items
-const onParentRowReorder = (event) => {
+// FIXED: Reorder functions for parent items
+const onParentRowReorder = async (event) => {
     console.log('Parent reorder event:', event);
-    // Reorder the main list
+
+    // Update local state immediately for better UX
     masterDataList.value = event.value;
 
-    // You can save the new order to backend here
-    saveParentOrder();
-};
-
-const saveParentOrder = async () => {
     try {
-        // Create order data - assuming each item has an order field
-        const orderData = masterDataList.value.map((item, index) => ({
+        // Prepare order data for API
+        const orderUpdates = event.value.map((item, index) => ({
             id: item.id,
             order: index + 1
         }));
 
-        console.log('Saving parent order:', orderData);
-        // Call API to save order - you'll need to implement this endpoint
-        // await masterDataService.updateOrder(orderData);
+        console.log('Saving parent order:', orderUpdates);
 
-        toast.add({
-            severity: 'success',
-            summary: 'Thành công',
-            detail: 'Đã cập nhật thứ tự tòa nhà'
-        });
+        // Call API to save order
+        const response = await masterDataService.updateParentOrders(orderUpdates);
+
+        if (response.data.success) {
+            toast.add({
+                severity: 'success',
+                summary: 'Thành công',
+                detail: 'Đã cập nhật thứ tự tòa nhà',
+                life: 2000
+            });
+        } else {
+            throw new Error('API returned success: false');
+        }
     } catch (err) {
-        console.error('Error saving order:', err);
+        console.error('Error saving parent order:', err);
         toast.add({
             severity: 'error',
             summary: 'Lỗi',
-            detail: 'Không thể cập nhật thứ tự'
+            detail: 'Không thể cập nhật thứ tự. Đang tải lại dữ liệu...',
+            life: 3000
         });
+
+        // Revert changes and reload data
+        await fetchData();
     }
 };
 
-// Reorder functions for children items
-const onChildRowReorder = (event, parentIndex) => {
+// FIXED: Reorder functions for children items
+const onChildRowReorder = async (event, parentIndex) => {
     console.log('Child reorder event:', event, 'Parent index:', parentIndex);
 
-    // Update children array for specific parent
+    // Update local state immediately
     if (masterDataList.value[parentIndex]) {
-        masterDataList.value[parentIndex].children = event.value;
+        const parentItem = masterDataList.value[parentIndex];
+        const oldChildren = [...parentItem.children];
+
+        // Update children array
+        parentItem.children = event.value;
 
         // Force reactivity
         masterDataList.value = [...masterDataList.value];
 
-        // Save children order
-        saveChildrenOrder(masterDataList.value[parentIndex].id, event.value);
-    }
-};
+        try {
+            // Prepare order data for API
+            const orderUpdates = event.value.map((child, index) => ({
+                id: child.id,
+                order: index + 1
+            }));
 
-const saveChildrenOrder = async (parentId, children) => {
-    try {
-        // Create order data for children
-        const orderData = children.map((child, index) => ({
-            id: child.id,
-            order: index + 1
-        }));
+            console.log('Saving children order for parent:', parentItem.id, orderUpdates);
 
-        console.log('Saving children order for parent:', parentId, orderData);
-        // Call API to save children order - you'll need to implement this endpoint
-        // await masterDataService.updateChildrenOrder(parentId, orderData);
+            // Call API to save children order
+            const response = await masterDataService.updateChildrenOrders(parentItem.id, orderUpdates);
 
-        toast.add({
-            severity: 'success',
-            summary: 'Thành công',
-            detail: 'Đã cập nhật thứ tự loại căn hộ'
-        });
-    } catch (err) {
-        console.error('Error saving children order:', err);
-        toast.add({
-            severity: 'error',
-            summary: 'Lỗi',
-            detail: 'Không thể cập nhật thứ tự'
-        });
+            if (response.data.success) {
+                toast.add({
+                    severity: 'success',
+                    summary: 'Thành công',
+                    detail: 'Đã cập nhật thứ tự loại căn hộ',
+                    life: 2000
+                });
+            } else {
+                throw new Error('API returned success: false');
+            }
+        } catch (err) {
+            console.error('Error saving children order:', err);
+            toast.add({
+                severity: 'error',
+                summary: 'Lỗi',
+                detail: 'Không thể cập nhật thứ tự. Đang khôi phục...',
+                life: 3000
+            });
+
+            // Revert changes
+            parentItem.children = oldChildren;
+            masterDataList.value = [...masterDataList.value];
+        }
     }
 };
 
@@ -280,6 +295,7 @@ watch(
                 reorderableRows
                 paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
                 currentPageReportTemplate="Hiển thị {first} đến {last} của {totalRecords} mục"
+                class="reorderable-table"
             >
                 <template #header>
                     <div class="flex justify-between items-center">
@@ -292,8 +308,14 @@ watch(
                 </template>
                 <template #empty>Không có dữ liệu</template>
 
-                <!-- Row Reorder Handle -->
-                <Column rowReorder headerStyle="width: 3rem" />
+                <!-- IMPROVED: Row Reorder Handle with better styling -->
+                <Column rowReorder headerStyle="width: 4rem; text-align: center;" bodyClass="reorder-handle">
+                    <template #body>
+                        <div class="reorder-grip">
+                            <i class="pi pi-bars text-lg"></i>
+                        </div>
+                    </template>
+                </Column>
 
                 <!-- Selection Column -->
                 <Column selectionMode="multiple" headerStyle="width: 3rem" />
@@ -326,22 +348,28 @@ watch(
                     </template>
                 </Column>
 
-                <!-- Row Expansion Template -->
+                <!-- IMPROVED: Row Expansion Template with better children reorder -->
                 <template #expansion="{ data, index: parentIndex }">
-                    <div class="p-3 bg-gray-50">
-                        <div class="flex justify-between items-center mb-3">
-                            <h5 class="text-primary mb-0">Loại căn hộ trong {{ data.name }}</h5>
+                    <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="flex justify-between items-center mb-4">
+                            <h5 class="text-primary mb-0 font-semibold">Loại căn hộ trong {{ data.name }}</h5>
                             <div class="flex items-center gap-2">
                                 <Tag value="Kéo thả để sắp xếp loại căn hộ" severity="success" size="small" />
                                 <i class="pi pi-arrows-v text-green-500"></i>
                             </div>
                         </div>
 
-                        <div v-if="!data.children || data.children.length === 0" class="text-gray-500 italic">Chưa có loại căn hộ nào</div>
+                        <div v-if="!data.children || data.children.length === 0" class="text-gray-500 italic text-center py-4 bg-white rounded border-2 border-dashed border-gray-300">Chưa có loại căn hộ nào. Nhấn nút "+" để thêm.</div>
 
-                        <DataTable v-else :value="data.children" dataKey="id" size="small" reorderableRows @rowReorder="(event) => onChildRowReorder(event, parentIndex)">
-                            <!-- Child Row Reorder Handle -->
-                            <Column rowReorder headerStyle="width: 3rem" />
+                        <DataTable v-else :value="data.children" dataKey="id" size="small" reorderableRows @rowReorder="(event) => onChildRowReorder(event, parentIndex)" class="children-reorderable-table">
+                            <!-- IMPROVED: Child Row Reorder Handle -->
+                            <Column rowReorder headerStyle="width: 4rem; text-align: center;" bodyClass="reorder-handle">
+                                <template #body>
+                                    <div class="reorder-grip children-grip">
+                                        <i class="pi pi-bars text-sm"></i>
+                                    </div>
+                                </template>
+                            </Column>
 
                             <!-- Child Name -->
                             <Column field="name" header="Tên loại căn hộ">
@@ -426,36 +454,127 @@ watch(
 </template>
 
 <style scoped>
+/* Enhanced reorder grip styling */
+:deep(.reorder-handle) {
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding: 0.75rem !important;
+}
+
+.reorder-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    color: var(--surface-400);
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
+.reorder-grip:hover {
+    background-color: var(--surface-200);
+    color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.reorder-grip:active {
+    cursor: grabbing;
+    background-color: var(--primary-100);
+    color: var(--primary-600);
+}
+
+/* Children table specific styling */
+.children-grip {
+    background-color: var(--green-50);
+    border: 1px solid var(--green-200);
+}
+
+.children-grip:hover {
+    background-color: var(--green-100);
+    color: var(--green-600);
+}
+
+/* Enhanced row expansion styling */
 :deep(.p-datatable-row-expansion) {
-    background: var(--surface-50);
+    background: var(--surface-50) !important;
+    border: none !important;
 }
 
-:deep(.p-datatable-tbody > tr > td) {
-    border-bottom: 1px solid var(--surface-border);
+:deep(.children-reorderable-table) {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-:deep(.p-tag) {
-    font-size: 0.75rem;
+:deep(.children-reorderable-table .p-datatable-tbody > tr) {
+    transition: all 0.2s ease;
 }
 
-/* Custom styling for reorder handles */
+:deep(.children-reorderable-table .p-datatable-tbody > tr:hover) {
+    background-color: var(--green-50) !important;
+}
+
+/* Improved reorder indicators */
 :deep(.p-datatable-reorder-indicator-up),
 :deep(.p-datatable-reorder-indicator-down) {
-    background-color: var(--primary-color);
+    background-color: var(--primary-color) !important;
+    height: 4px !important;
+    border-radius: 2px !important;
+    animation: pulse 1s infinite;
 }
 
-:deep(.p-datatable-row-reorder-cursor) {
-    cursor: move;
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
 }
 
-/* Hover effects for reorderable rows */
-:deep(.p-datatable-tbody > tr:hover .p-row-reorder-icon) {
-    color: var(--primary-color);
-}
-
-/* Visual feedback during drag */
+/* Enhanced drag styling */
 :deep(.p-datatable-tbody > tr.p-row-reorder-drag) {
-    background: var(--primary-50);
-    opacity: 0.8;
+    background: var(--primary-50) !important;
+    opacity: 0.8 !important;
+    transform: scale(1.02) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    border: 2px solid var(--primary-200) !important;
+}
+
+/* Mobile responsiveness for reorder */
+@media (max-width: 768px) {
+    .reorder-grip {
+        padding: 0.75rem;
+    }
+
+    .reorder-grip i {
+        font-size: 1.2rem;
+    }
+
+    :deep(.reorder-handle) {
+        width: 3rem !important;
+        min-width: 3rem !important;
+    }
+}
+
+/* Accessibility improvements */
+:deep(.p-row-reorder-icon) {
+    transition: all 0.2s ease;
+}
+
+:deep(.p-datatable-tbody > tr:hover .p-row-reorder-icon) {
+    color: var(--primary-color) !important;
+    transform: scale(1.2);
+}
+
+/* Loading state for reorder operations */
+:deep(.p-datatable-loading-overlay) {
+    background: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(2px);
 }
 </style>
