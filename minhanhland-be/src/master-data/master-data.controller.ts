@@ -10,6 +10,9 @@ import {
   Patch,
   Query,
   UseGuards,
+  HttpStatus,
+  HttpException,
+  Logger,
 } from '@nestjs/common';
 import { MasterDataService } from './master-data.service';
 import { CreateMasterDataDto } from './dto/create-master-data.dto';
@@ -24,9 +27,17 @@ interface OrderUpdateDto {
   order: number;
 }
 
+interface ReorderResponse {
+  success: boolean;
+  message?: string;
+  details?: any;
+}
+
 @UseGuards(AuthGuard('jwt'))
 @Controller('master-data')
 export class MasterDataController {
+  private readonly logger = new Logger(MasterDataController.name);
+
   constructor(private readonly masterDataService: MasterDataService) {}
   
   @Get()
@@ -43,7 +54,12 @@ export class MasterDataController {
   async create(
     @Body() body: CreateMasterDataDto,
   ): Promise<MasterDataResponseDto> {
-    return this.masterDataService.create(body);
+    try {
+      return await this.masterDataService.create(body);
+    } catch (error) {
+      this.logger.error('Error creating master data:', error);
+      throw error;
+    }
   }
 
   @Put(':id')
@@ -51,99 +67,204 @@ export class MasterDataController {
     @Param('id') id: string,
     @Body() body: UpdateMasterDataDto,
   ): Promise<MasterDataResponseDto | null> {
-    return this.masterDataService.update(id, body);
+    try {
+      return await this.masterDataService.update(id, body);
+    } catch (error) {
+      this.logger.error(`Error updating master data ${id}:`, error);
+      throw error;
+    }
   }
 
   @Patch(':id/order')
   async updateOrder(
     @Param('id') id: string,
     @Body('order') order: number,
-  ): Promise<{ success: boolean }> {
-    const success = await this.masterDataService.updateOrder(id, order);
-    return { success };
-  }
-
-  // FIXED: API để update order cho parent items (tòa nhà)
-  @Patch('parents/reorder')
-  async updateParentOrders(
-    @Body() orderUpdates: OrderUpdateDto[],
   ): Promise<{ success: boolean; message?: string }> {
     try {
-      console.log('Received parent reorder request:', orderUpdates);
-      
-      // Validate input
-      if (!Array.isArray(orderUpdates) || orderUpdates.length === 0) {
-        return { success: false, message: 'Invalid order updates data' };
-      }
-
-      // Validate each update item
-      for (const update of orderUpdates) {
-        if (!update.id || typeof update.order !== 'number') {
-          return { success: false, message: 'Invalid update item format' };
-        }
-      }
-
-      const success = await this.masterDataService.updateParentOrders(orderUpdates);
-      
-      if (success) {
-        console.log('Parent reorder completed successfully');
-        return { success: true, message: 'Parent order updated successfully' };
-      } else {
-        return { success: false, message: 'Failed to update parent order' };
-      }
+      const success = await this.masterDataService.updateOrder(id, order);
+      return { 
+        success,
+        message: success ? 'Order updated successfully' : 'Failed to update order'
+      };
     } catch (error) {
-      console.error('Error in updateParentOrders:', error);
-      return { success: false, message: 'Internal server error' };
+      this.logger.error(`Error updating order for ${id}:`, error);
+      throw error;
     }
   }
 
-  // FIXED: API để update order cho children items (loại căn hộ)
+  // ENHANCED: API để update order cho parent items (tòa nhà)
+  @Patch('parents/reorder')
+  async updateParentOrders(
+    @Body() orderUpdates: OrderUpdateDto[],
+  ): Promise<ReorderResponse> {
+    try {
+      this.logger.log('Received parent reorder request:', JSON.stringify(orderUpdates));
+      
+      // Basic validation
+      if (!Array.isArray(orderUpdates)) {
+        throw new HttpException(
+          'Request body must be an array of order updates',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (orderUpdates.length === 0) {
+        throw new HttpException(
+          'Order updates array cannot be empty',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate each update item structure
+      for (const update of orderUpdates) {
+        if (!update || typeof update !== 'object') {
+          throw new HttpException(
+            'Each update item must be an object',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        if (!update.id || typeof update.id !== 'string') {
+          throw new HttpException(
+            'Each update item must have a valid id (string)',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        if (typeof update.order !== 'number' || update.order < 1) {
+          throw new HttpException(
+            'Each update item must have a valid order (number >= 1)',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // Call service method
+      const result = await this.masterDataService.updateParentOrders(orderUpdates);
+      
+      this.logger.log('Parent reorder result:', JSON.stringify(result));
+      
+      return result;
+    } catch (error) {
+      this.logger.error('Error in updateParentOrders:', error);
+      
+      // Re-throw HTTP exceptions as-is
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      
+      // Convert other errors to HTTP exceptions
+      throw new HttpException(
+        error.message || 'Internal server error during parent reorder',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // ENHANCED: API để update order cho children items (loại căn hộ)
   @Patch(':parentId/children/reorder')
   async updateChildrenOrders(
     @Param('parentId') parentId: string,
     @Body() orderUpdates: OrderUpdateDto[],
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<ReorderResponse> {
     try {
-      console.log('Received children reorder request for parent:', parentId, orderUpdates);
+      this.logger.log(
+        `Received children reorder request for parent ${parentId}:`,
+        JSON.stringify(orderUpdates)
+      );
       
-      // Validate input
-      if (!parentId) {
-        return { success: false, message: 'Parent ID is required' };
+      // Basic validation
+      if (!parentId || typeof parentId !== 'string') {
+        throw new HttpException(
+          'Parent ID must be a valid string',
+          HttpStatus.BAD_REQUEST
+        );
       }
 
-      if (!Array.isArray(orderUpdates) || orderUpdates.length === 0) {
-        return { success: false, message: 'Invalid order updates data' };
+      if (!Array.isArray(orderUpdates)) {
+        throw new HttpException(
+          'Request body must be an array of order updates',
+          HttpStatus.BAD_REQUEST
+        );
       }
 
-      // Validate each update item
+      if (orderUpdates.length === 0) {
+        throw new HttpException(
+          'Order updates array cannot be empty',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate each update item structure
       for (const update of orderUpdates) {
-        if (!update.id || typeof update.order !== 'number') {
-          return { success: false, message: 'Invalid update item format' };
+        if (!update || typeof update !== 'object') {
+          throw new HttpException(
+            'Each update item must be an object',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        if (!update.id || typeof update.id !== 'string') {
+          throw new HttpException(
+            'Each update item must have a valid id (string)',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        if (typeof update.order !== 'number' || update.order < 1) {
+          throw new HttpException(
+            'Each update item must have a valid order (number >= 1)',
+            HttpStatus.BAD_REQUEST
+          );
         }
       }
 
-      const success = await this.masterDataService.updateChildrenOrders(parentId, orderUpdates);
+      // Call service method
+      const result = await this.masterDataService.updateChildrenOrders(
+        parentId, 
+        orderUpdates
+      );
       
-      if (success) {
-        console.log('Children reorder completed successfully');
-        return { success: true, message: 'Children order updated successfully' };
-      } else {
-        return { success: false, message: 'Failed to update children order' };
-      }
+      this.logger.log('Children reorder result:', JSON.stringify(result));
+      
+      return result;
     } catch (error) {
-      console.error('Error in updateChildrenOrders:', error);
-      return { success: false, message: 'Internal server error' };
+      this.logger.error('Error in updateChildrenOrders:', error);
+      
+      // Re-throw HTTP exceptions as-is
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      
+      // Convert other errors to HTTP exceptions
+      throw new HttpException(
+        error.message || 'Internal server error during children reorder',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
   @Delete(':id')
-  async delete(@Param('id') id: string): Promise<{ success: boolean }> {
-    const success = await this.masterDataService.delete(id);
-    return { success };
+  async delete(@Param('id') id: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const success = await this.masterDataService.delete(id);
+      return { 
+        success,
+        message: success ? 'Item deleted successfully' : 'Failed to delete item'
+      };
+    } catch (error) {
+      this.logger.error(`Error deleting master data ${id}:`, error);
+      throw error;
+    }
   }
 
   @Get('/:id')
   async findByType(@Param('id') id: string): Promise<MasterDataResponseDto> {
-    return this.masterDataService.findById(id);
+    try {
+      return await this.masterDataService.findById(id);
+    } catch (error) {
+      this.logger.error(`Error finding master data ${id}:`, error);
+      throw error;
+    }
   }
 }
