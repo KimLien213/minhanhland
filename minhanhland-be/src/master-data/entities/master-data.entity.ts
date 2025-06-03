@@ -1,3 +1,4 @@
+// src/master-data/entities/master-data.entity.ts
 import { BaseEntity } from 'src/common/entities/base.entity';
 import { MasterDataType } from 'src/common/enums';
 import { Product } from 'src/products/entities/product.entity';
@@ -20,6 +21,9 @@ export class MasterDataEntity extends BaseEntity {
 
   @Column({ type: 'enum', enum: MasterDataType })
   type: MasterDataType;
+
+  @Column({ type: 'int', default: 0 })
+  order: number;
 
   @OneToMany(() => Product, (image) => image.apartmentType, {
     cascade: true,

@@ -139,6 +139,14 @@ function onSort(event) {
     lazyParams.value.sortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
     fetchData();
 }
+function onRowReorder(event) {
+    debugger;
+}
+function onRowReorderChildren(event) {
+    debugger;
+}
+
+const expandedRows = ref([]);
 </script>
 
 <template>
@@ -163,10 +171,13 @@ function onSort(event) {
                 :loading="loading"
                 :rowsPerPageOptions="[5, 10, 25]"
                 stripedRows
+                :reorderableRows="true"
+                @rowReorder="onRowReorder"
                 :filters="filters"
                 @page="onPage"
                 @sort="onSort"
                 resizableColumns
+                v-model:expandedRows="expandedRows"
                 columnResizeMode="expand"
                 lazy
                 reorderableColumns
@@ -177,7 +188,7 @@ function onSort(event) {
             >
                 <template #header>
                     <div class="flex justify-between items-center">
-                        <h4 class="m-0">Danh sách loại căn hộ</h4>
+                        <h4 class="m-0">Danh sách phân khu</h4>
                         <IconField>
                             <InputIcon><i class="pi pi-search" /></InputIcon>
                             <InputText v-model="filters['global'].value" placeholder="Tìm kiếm..." />
@@ -185,17 +196,31 @@ function onSort(event) {
                     </div>
                 </template>
                 <template #empty>Không có dữ liệu</template>
-
-                <Column selectionMode="multiple" headerStyle="width: 3rem" />
-                <Column field="name" header="Loại" sortable />
-                <Column field="parent.name" header="Phân khu" sortable />
-                <Column field="description" header="Ghi chú" />
+                <Column rowReorder style="width: 3rem" />
+                <!-- Nút mở rộng -->
+                <Column expander style="width: 3rem" />
+                <Column field="name" header="Phân khu" sortable />
                 <Column :exportable="false" headerStyle="min-width:10rem">
                     <template #body="slotProps">
                         <Button icon="pi pi-pencil" outlined rounded class="mr-2" @click="editItem(slotProps.data)" />
                         <Button icon="pi pi-trash" outlined rounded severity="danger" @click="confirmDeleteItem(slotProps.data)" />
                     </template>
                 </Column>
+                <template #expansion="slotProps">
+                    <div class="p-4">
+                        <h5 class="text-primary">Loại căn hộ của {{ slotProps.data.name }}</h5>
+                        <DataTable :value="slotProps.data.children" :reorderableRows="true" @rowReorder="onRowReorderChildren">
+                            <Column rowReorder style="width: 3rem" />
+                            <Column field="name" header="Loại" sortable />
+                            <Column :exportable="false" headerStyle="min-width:10rem">
+                                <template #body="slotProps">
+                                    <Button icon="pi pi-pencil" outlined rounded class="mr-2" @click="editItem(slotProps.data)" />
+                                    <Button icon="pi pi-trash" outlined rounded severity="danger" @click="confirmDeleteItem(slotProps.data)" />
+                                </template>
+                            </Column>
+                        </DataTable>
+                    </div>
+                </template>
             </DataTable>
         </div>
 

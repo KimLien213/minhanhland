@@ -11,7 +11,7 @@ export class MasterDataRepository {
   constructor(
     @InjectRepository(MasterDataEntity)
     private readonly repo: Repository<MasterDataEntity>,
-  ) {}
+  ) { }
 
   async findAllNoPaging(type: MasterDataType) {
     return this.repo.find({
@@ -26,7 +26,10 @@ export class MasterDataRepository {
   }
 
   async findAll(dto: PaginationDto) {
-    const query = this.repo.createQueryBuilder('md').leftJoinAndSelect('md.parent', 'parent');
+    const query = this.repo.createQueryBuilder('md')
+      .leftJoinAndSelect('md.parent', 'parent')
+      .leftJoinAndSelect('md.children', 'children')
+      .where('md.parentId IS NULL');
     return paginate(query, dto, ['md.name', 'parent.name']);
   }
   async createMasterData(
