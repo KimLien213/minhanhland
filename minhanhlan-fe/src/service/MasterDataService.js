@@ -17,14 +17,6 @@ export const masterDataService = {
     updateOrder(id, order) {
         return axiosInstance.patch(`/master-data/${id}/order`, { order });
     },
-    // Thêm API để update order cho parents
-    updateParentOrders(orderUpdates) {
-        return axiosInstance.patch('/master-data/parents/reorder', orderUpdates);
-    },
-    // Thêm API để update order cho children
-    updateChildrenOrders(parentId, orderUpdates) {
-        return axiosInstance.patch(`/master-data/${parentId}/children/reorder`, orderUpdates);
-    },
     remove(id) {
         return axiosInstance.delete(`/master-data/${id}`);
     }

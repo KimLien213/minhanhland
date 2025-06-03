@@ -19,11 +19,6 @@ import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { MasterDataType } from 'src/common/enums';
 import { AuthGuard } from '@nestjs/passport';
 
-interface OrderUpdateDto {
-  id: string;
-  order: number;
-}
-
 @UseGuards(AuthGuard('jwt'))
 @Controller('master-data')
 export class MasterDataController {
@@ -63,27 +58,8 @@ export class MasterDataController {
     return { success };
   }
 
-  // API để update order cho parent items
-  @Patch('parents/reorder')
-  async updateParentOrders(
-    @Body() orderUpdates: OrderUpdateDto[],
-  ): Promise<{ success: boolean }> {
-    const success = await this.masterDataService.updateParentOrders(orderUpdates);
-    return { success };
-  }
-
-  // API để update order cho children items
-  @Patch(':parentId/children/reorder')
-  async updateChildrenOrders(
-    @Param('parentId') parentId: string,
-    @Body() orderUpdates: OrderUpdateDto[],
-  ): Promise<{ success: boolean }> {
-    const success = await this.masterDataService.updateChildrenOrders(parentId, orderUpdates);
-    return { success };
-  }
-
   @Delete(':id')
-  async delete(@Param('id') id: string): Promise<{ success: boolean }> {
+  async delete(@Param('id') id: number): Promise<{ success: boolean }> {
     const success = await this.masterDataService.delete(id);
     return { success };
   }
