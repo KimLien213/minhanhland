@@ -1,3 +1,4 @@
+// src/master-data/master-data.controller.ts
 import {
   Body,
   Controller,
@@ -6,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Patch,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +23,7 @@ import { AuthGuard } from '@nestjs/passport';
 @Controller('master-data')
 export class MasterDataController {
   constructor(private readonly masterDataService: MasterDataService) {}
+  
   @Get()
   findAll(@Query() query: PaginationDto) {
     return this.masterDataService.findAll(query);
@@ -44,6 +47,15 @@ export class MasterDataController {
     @Body() body: UpdateMasterDataDto,
   ): Promise<MasterDataResponseDto | null> {
     return this.masterDataService.update(id, body);
+  }
+
+  @Patch(':id/order')
+  async updateOrder(
+    @Param('id') id: string,
+    @Body('order') order: number,
+  ): Promise<{ success: boolean }> {
+    const success = await this.masterDataService.updateOrder(id, order);
+    return { success };
   }
 
   @Delete(':id')

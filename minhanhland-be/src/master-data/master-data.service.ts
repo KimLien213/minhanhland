@@ -1,3 +1,4 @@
+// src/master-data/master-data.service.ts
 import { Injectable, ConflictException } from '@nestjs/common';
 import { CreateMasterDataDto } from './dto/create-master-data.dto';
 import { UpdateMasterDataDto } from './dto/update-master-data.dto';
@@ -17,10 +18,15 @@ export class MasterDataService {
   async findAllNoPaging(type: MasterDataType) {
     return this.masterDataRepository.findAllNoPaging(type);
   }
+
   async create(data: CreateMasterDataDto): Promise<MasterDataResponseDto> {
+    // Get the next order value
+    const maxOrder = await this.masterDataRepository.getMaxOrder(data.parentId);
+    
     const entity = await this.masterDataRepository.createMasterData({
       ...data,
-      type: data.parentId ? MasterDataType.LOAI_CAN_HO : MasterDataType.TOA_NHA
+      type: data.parentId ? MasterDataType.LOAI_CAN_HO : MasterDataType.TOA_NHA,
+      order: maxOrder + 1
     });
     return new MasterDataResponseDto(entity);
   }
@@ -31,6 +37,10 @@ export class MasterDataService {
   ): Promise<MasterDataResponseDto | null> {
     const entity = await this.masterDataRepository.updateMasterData(id, data);
     return entity ? new MasterDataResponseDto(entity) : null;
+  }
+
+  async updateOrder(id: string, newOrder: number): Promise<boolean> {
+    return this.masterDataRepository.updateOrder(id, newOrder);
   }
 
   async delete(id: number): Promise<boolean> {

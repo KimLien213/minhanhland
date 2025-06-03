@@ -1,3 +1,4 @@
+// src/master-data/repositories/master-data.repository.ts
 import { Repository } from 'typeorm';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -11,7 +12,7 @@ export class MasterDataRepository {
   constructor(
     @InjectRepository(MasterDataEntity)
     private readonly repo: Repository<MasterDataEntity>,
-  ) {}
+  ) { }
 
   async findAllNoPaging(type: MasterDataType) {
     return this.repo.find({
@@ -20,15 +21,24 @@ export class MasterDataRepository {
       },
       relations: ['children'],
       order: {
-        name: 'ASC'
+        order: 'ASC',
+        children: {
+          order: 'ASC'
+        }
       }
     });
   }
 
   async findAll(dto: PaginationDto) {
-    const query = this.repo.createQueryBuilder('md').leftJoinAndSelect('md.parent', 'parent');
-    return paginate(query, dto, ['md.name', 'parent.name']);
+    const query = this.repo.createQueryBuilder('md')
+      .leftJoinAndSelect('md.children', 'children') // Chỉ cần load children, không cần parent
+      .where('md.parentId IS NULL') // Chỉ lấy parent records
+      .orderBy('md.name', 'ASC')
+      .addOrderBy('children.name', 'ASC');
+
+    return paginate(query, dto, ['md.name', 'children.name']);
   }
+
   async createMasterData(
     data: Partial<MasterDataEntity>,
   ): Promise<MasterDataEntity> {
@@ -42,6 +52,27 @@ export class MasterDataRepository {
   ): Promise<MasterDataEntity | null> {
     await this.repo.update(id, data);
     return this.repo.findOne({ where: { id } });
+  }
+
+  async updateOrder(id: string, newOrder: number): Promise<boolean> {
+    const result = await this.repo.update(id, { order: newOrder });
+    return result.affected > 0;
+  }
+
+  async getMaxOrder(parentId?: string): Promise<number> {
+    const query = this.repo.createQueryBuilder('md');
+
+    if (parentId) {
+      query.where('md.parentId = :parentId', { parentId });
+    } else {
+      query.where('md.parentId IS NULL');
+    }
+
+    const result = await query
+      .select('MAX(md.order)', 'maxOrder')
+      .getRawOne();
+
+    return result?.maxOrder || 0;
   }
 
   async deleteMasterData(id: number): Promise<boolean> {
