@@ -1,12 +1,12 @@
-<!-- src/components/ProductDataTable.vue - Fixed SortableJS -->
+<!-- src/components/ProductDataTable.vue - Fixed Checkbox Selection -->
 <template>
     <DataTable
         ref="dt"
         :value="virtualProducts"
         dataKey="id"
         size="small"
-        :selection="selectedProducts"
-        @update:selection="$emit('update:selectedProducts', $event)"
+        v-model:selection="internalSelection"
+        @update:selection="handleSelectionUpdate"
         :filters="filters"
         resizableColumns
         columnResizeMode="expand"
@@ -74,14 +74,6 @@
 
         <!-- Selection Column -->
         <Column selectionMode="multiple" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
-            <template #body="{ data }">
-                <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
-                    <Skeleton width="100%" height="1rem" />
-                </div>
-                <div v-else>
-                    <Checkbox :modelValue="isSelected(data)" @update:modelValue="toggleSelection(data, $event)" :disabled="isDragMode" />
-                </div>
-            </template>
             <template #loading>
                 <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
                     <Skeleton width="100%" height="1rem" />
@@ -281,22 +273,28 @@ const multiSelectRefs = reactive({});
 const dt = ref(null);
 const sortableInstance = ref(null);
 const isDragMode = ref(false);
+const internalSelection = ref([]);
 
-// Selection management
-const isSelected = (data) => {
-    return props.selectedProducts.some((item) => item.id === data.id);
-};
-
-const toggleSelection = (data, selected) => {
-    let newSelection = [...props.selectedProducts];
-    if (selected) {
-        if (!newSelection.find((item) => item.id === data.id)) {
-            newSelection.push(data);
+// Watch for props changes
+watch(
+    () => props.selectedProducts,
+    (newVal) => {
+        if (Array.isArray(newVal)) {
+            internalSelection.value = [...newVal];
         }
-    } else {
-        newSelection = newSelection.filter((item) => item.id !== data.id);
-    }
-    emit('update:selectedProducts', newSelection);
+    },
+    { immediate: true, deep: true }
+);
+
+// Selection management - Simplified version
+const handleSelectionUpdate = (newSelection) => {
+    // Update internal selection
+    internalSelection.value = newSelection || [];
+
+    // Filter out placeholder items and emit to parent
+    const validSelection = (newSelection || []).filter((item) => item && typeof item === 'object' && item.id && !item.isPlaceholder);
+
+    emit('update:selectedProducts', validSelection);
 };
 
 // Methods

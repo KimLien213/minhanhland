@@ -1164,7 +1164,8 @@ const getColumnStyle = computed(() => {
             <ProductDataTable
                 ref="mainDataTable"
                 :virtual-products="virtualProducts"
-                v-model:selected-products="selectedProducts"
+                :selected-products="selectedProducts || []"
+                @update:selected-products="selectedProducts = $event || []"
                 :filters="filters"
                 :filter-options="filterOptions"
                 :columns="columns"
