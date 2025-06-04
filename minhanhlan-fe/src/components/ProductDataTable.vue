@@ -12,7 +12,7 @@
         columnResizeMode="expand"
         stripedRows
         scrollable
-        :scrollHeight="'750px'"
+        :scrollHeight="scrollHeight"
         scrollDirection="horizontal"
         filterDisplay="menu"
         tableStyle="min-width: 100%; width: 100%;"
@@ -73,7 +73,7 @@
         </template>
 
         <!-- Selection Column -->
-        <Column selectionMode="multiple" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
+        <Column selectionMode="multiple" v-if="isAdmin" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
             <template #loading>
                 <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
                     <Skeleton width="100%" height="1rem" />
@@ -120,7 +120,7 @@
         <!-- Dynamic Columns -->
         <Column
             v-for="item in columns"
-            :sortable="item.sortable !== false && isAdmin && !isDragMode"
+            :sortable="(item.sortable !== false && isAdmin && !isDragMode) || item.key === 'sellingPrice'"
             :key="item.key"
             :sortField="item.key"
             :showFilterMatchModes="false"
@@ -142,9 +142,19 @@
                         <span>{{ Number(data[item.key] || 0) }}m²</span>
                     </div>
                     <div v-else-if="item.type === 'money'" class="flex items-center gap-2 justify-end">{{ Number(data[item.key] || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) }}tr</div>
+                    <!-- In the dynamic columns section, update the images/media column -->
                     <div v-else-if="item.type === 'images'" class="flex items-center justify-center gap-2">
-                        <Button v-if="data[item.key]?.length > 0" @click="$emit('show-images', data[item.key])" icon="pi pi-images" outlined rounded severity="info" />
-                        <span v-else>Không có ảnh</span>
+                        <Button
+                            v-if="data[item.key]?.length > 0"
+                            @click="$emit('show-images', data[item.key])"
+                            :icon="hasVideo(data[item.key]) ? 'pi pi-video' : 'pi pi-images'"
+                            outlined
+                            rounded
+                            :severity="hasVideo(data[item.key]) ? 'info' : 'secondary'"
+                            :label="getMediaCountLabel(data[item.key])"
+                            size="small"
+                        />
+                        <span v-else>Không có file</span>
                     </div>
                     <div v-else-if="item.type === 'phone'" class="flex items-center gap-2">
                         <a v-if="data[item.key]" :href="`tel:${data[item.key]}`" class="inline-flex items-center gap-1 text-gray-700 hover:text-blue-500">
@@ -467,6 +477,40 @@ const destroySortable = () => {
         sortableInstance.value = null;
         console.log('🗑️ SortableJS destroyed');
     }
+};
+
+// Helper methods for media detection
+const hasVideo = (mediaList) => {
+    if (!mediaList || !Array.isArray(mediaList)) return false;
+    return mediaList.some((item) => isVideoFile(item));
+};
+
+const getMediaCountLabel = (mediaList) => {
+    if (!mediaList || !Array.isArray(mediaList)) return '';
+
+    const imageCount = mediaList.filter((item) => !isVideoFile(item)).length;
+    const videoCount = mediaList.filter((item) => isVideoFile(item)).length;
+
+    const parts = [];
+    if (imageCount > 0) parts.push(`${imageCount} ảnh`);
+    if (videoCount > 0) parts.push(`${videoCount} video`);
+
+    return parts.join(' + ');
+};
+
+const isVideoFile = (item) => {
+    if (!item) return false;
+
+    // Check by URL extension
+    const videoExtensions = /\.(mp4|webm|ogg|avi|mov|wmv|mkv|flv|m4v|3gp)$/i;
+    if (item.url && videoExtensions.test(item.url)) return true;
+
+    // Check by MIME type
+    const videoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/mkv', 'video/m4v', 'video/3gp', 'video/quicktime', 'video/3gpp'];
+    if (item.type && videoTypes.includes(item.type)) return true;
+    if (item.mimeType && videoTypes.includes(item.mimeType)) return true;
+
+    return false;
 };
 
 const toggleDragMode = () => {

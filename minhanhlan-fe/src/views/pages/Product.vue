@@ -1075,12 +1075,49 @@ const onPaste = (event) => {
     }
 };
 
-// Handle file events từ component
+// Helper function to check if file is video
+const isVideoFile = (file) => {
+    if (!file) return false;
+
+    // Check by file type
+    if (file.type && file.type.startsWith('video/')) return true;
+
+    // Check by file name extension
+    if (file.name) {
+        const videoExtensions = /\.(mp4|webm|ogg|avi|mov|wmv|mkv|flv|m4v|3gp)$/i;
+        return videoExtensions.test(file.name);
+    }
+
+    // Check by URL
+    if (file.url) {
+        const videoExtensions = /\.(mp4|webm|ogg|avi|mov|wmv|mkv|flv|m4v|3gp)$/i;
+        return videoExtensions.test(file.url);
+    }
+
+    return false;
+};
+// Update onFilesUpdated to handle preview properly
 const onFilesUpdated = (data) => {
+    // Update pending files (these are files selected but not yet submitted)
     pendingImages.value = data.pending;
-    // data.all chứa tất cả files (initial + pending)
-    // data.initial chứa files ban đầu
-    // data.pending chứa files mới thêm
+
+    console.log('Files updated:', {
+        pending: data.pending.length,
+        initial: data.initial.length,
+        all: data.all.length
+    });
+
+    // Show preview feedback if files were added
+    if (data.pending.length > 0) {
+        const imageCount = data.pending.filter((f) => !isVideoFile(f)).length;
+        const videoCount = data.pending.filter((f) => isVideoFile(f)).length;
+
+        const parts = [];
+        if (imageCount > 0) parts.push(`${imageCount} ảnh`);
+        if (videoCount > 0) parts.push(`${videoCount} video`);
+
+        console.log(`Preview ready: ${parts.join(' + ')}`);
+    }
 };
 
 const onFileRemoved = (data) => {
@@ -1113,18 +1150,59 @@ const onSelectedFiles = (event) => {
 
 const showImageGalery = ref(false);
 const imageGalery = ref([]);
+const showImages = (mediaList) => {
+    if (!mediaList || mediaList.length === 0) return;
 
-// Update showImages function
-const showImages = (images) => {
-    if (!images || images.length === 0) return;
-
-    imageGalery.value = images.map((t, index) => ({
-        src: import.meta.env.VITE_API_URL + t.url,
-        alt: `Hình ảnh ${index + 1}`
+    imageGalery.value = mediaList.map((item, index) => ({
+        src: import.meta.env.VITE_API_URL + item.url,
+        alt: `Media ${index + 1}`,
+        type: item.mimeType || getMediaType(item.url),
+        name: item.name || `media-${index + 1}`
     }));
 
     showImageGalery.value = true;
 };
+const getMediaType = (url) => {
+    if (!url) return 'image/jpeg';
+
+    const extension = url.split('.').pop()?.toLowerCase();
+    const videoExtensions = ['mp4', 'webm', 'ogg', 'avi', 'mov', 'wmv', 'mkv', 'flv', 'm4v', '3gp'];
+
+    if (videoExtensions.includes(extension)) {
+        switch (extension) {
+            case 'mov':
+                return 'video/quicktime';
+            case 'm4v':
+                return 'video/mp4';
+            case '3gp':
+                return 'video/3gpp';
+            default:
+                return `video/${extension}`;
+        }
+    }
+
+    // Image types
+    switch (extension) {
+        case 'jpg':
+        case 'jpeg':
+            return 'image/jpeg';
+        case 'png':
+            return 'image/png';
+        case 'gif':
+            return 'image/gif';
+        case 'webp':
+            return 'image/webp';
+        case 'bmp':
+            return 'image/bmp';
+        case 'tiff':
+            return 'image/tiff';
+        case 'svg':
+            return 'image/svg+xml';
+        default:
+            return 'image/jpeg';
+    }
+};
+
 const fullScreen = ref(false);
 const getRowIndex = (rowIndex) => {
     const currentPage = lazyParams.value.page || 1;
@@ -1175,6 +1253,7 @@ const getColumnStyle = computed(() => {
                 :is-mobile="isMobile"
                 :is-admin="isAdmin"
                 :lazy-params="lazyParams"
+                :scroll-height="'600px'"
                 @sort="handleSort"
                 @filter="handleFilter"
                 @refresh="handleRefresh"
@@ -1239,17 +1318,17 @@ const getColumnStyle = computed(() => {
 
                 <div class="flex flex-col gap-y-2">
                     <label>SĐT chủ nhà</label>
-                    <InputText v-model="form.apartmentContactInfo" class="w-full text-right" @input="formatPhone('apartmentContactInfo')" />
+                    <InputText v-model="form.apartmentContactInfo" class="w-full text-right" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
                     <label>Liên hệ</label>
-                    <InputText v-model="form.contactInfo" class="w-full text-right" @input="formatPhone('contactInfo')" />
+                    <InputText v-model="form.contactInfo" class="w-full text-right" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
                     <label>Báo nguồn</label>
-                    <InputText v-model="form.source" class="w-full text-right" @input="formatPhone('source')" />
+                    <InputText v-model="form.source" class="w-full text-right" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
@@ -1258,8 +1337,19 @@ const getColumnStyle = computed(() => {
                     <small v-if="errors.status" class="text-red-500">{{ errors.status }}</small>
                 </div>
             </form>
-            <MobilePasteFileUpload :initial-files="initialImages" :multiple="true" :max-file-size="5000000" accept="image/*" @files-updated="onFilesUpdated" @file-removed="onFileRemoved" @paste-success="onPasteSuccess" @paste-error="onPasteError" />
-
+            <MobilePasteFileUpload
+                :initial-files="initialImages"
+                :multiple="true"
+                :max-file-size="50000000"
+                accept="image/*,video/*,.mp4,.avi,.mov,.wmv,.webm,.ogg,.mkv,.flv,.m4v,.3gp,.jpg,.jpeg,.png,.gif,.webp,.bmp"
+                label="Hình ảnh & Video"
+                :support-video="true"
+                :support-image="true"
+                @files-updated="onFilesUpdated"
+                @file-removed="onFileRemoved"
+                @paste-success="onPasteSuccess"
+                @paste-error="onPasteError"
+            />
             <template #footer>
                 <Button label="Hủy" icon="pi pi-times" text @click="productDialog = false" />
                 <Button label="Lưu" icon="pi pi-check" type="submit" @click="submit" />
@@ -1287,9 +1377,8 @@ const getColumnStyle = computed(() => {
             <template #footer>
                 <Button label="No" icon="pi pi-times" text @click="deleteProductsDialog = false" />
                 <Button label="Yes" icon="pi pi-check" text @click="deleteSelectedProducts" />
-            </template>
-        </Dialog>
-        <FullscreenImageGallery v-model:visible="showImageGalery" :images="imageGalery" :show-thumbnails="true" />
+            </template> </Dialog
+        ><FullscreenImageGallery v-model:visible="showImageGalery" :media="imageGalery" :show-thumbnails="true" />
         <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
             <div class="responsive-zoom-table">
                 <ProductDataTable

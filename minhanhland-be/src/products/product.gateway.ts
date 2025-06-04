@@ -14,7 +14,7 @@ import { Product } from './entities/product.entity';
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'https://43fe-1-55-100-207.ngrok-free.app', 'http://localhost:54240'],
+    origin: ['http://localhost:5173', 'http://103.75.184.184:3082', 'http://localhost:54240'],
     credentials: true,
   },
   namespace: '/products',
@@ -102,8 +102,6 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
     // ONLY emit to specific room - removed the broadcast to all clients
     this.server.to(roomName).emit('product-updated', payload);
-    
-    this.logger.log(`Product updated notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
   }
 
   // Emit product deleted event - FIXED: Only emit to specific room
@@ -118,8 +116,6 @@ export class ProductGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
     // ONLY emit to specific room - removed the broadcast to all clients
     this.server.to(roomName).emit('product-deleted', payload);
-    
-    this.logger.log(`Product deleted notification sent to room: ${roomName} (${this.server.sockets.adapter.rooms.get(roomName)?.size || 0} clients)`);
   }
 
   // Debug method to broadcast to all clients (keep for debugging if needed)
