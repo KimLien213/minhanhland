@@ -1,3 +1,4 @@
+// entities/product.entity.ts - Bỏ qua index problematic
 import {
   Column,
   Entity,
@@ -5,6 +6,7 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  Index,
 } from 'typeorm';
 import { ProductImage } from './product-image.entity';
 import { MasterDataEntity } from 'src/master-data/entities/master-data.entity';
@@ -12,6 +14,8 @@ import { ProductStatus } from 'src/common/enums';
 import { BaseEntity } from 'src/common/entities/base.entity';
 
 @Entity('products')
+// Chỉ tạo index cho sort_order, bỏ qua index có thể conflict
+@Index('idx_products_sort_order', ['subdivision', 'apartmentType', 'sortOrder'])
 export class Product extends BaseEntity {
   // Mã tòa
   @Column({
@@ -71,6 +75,16 @@ export class Product extends BaseEntity {
     nullable: true,
   })
   balconyDirection: string | null;
+
+  // NEW: Sort order field - chỉ thêm cột, không tạo index phức tạp
+  @Column({
+    name: 'sort_order',
+    type: 'int',
+    nullable: true,
+    default: 0
+  })
+  sortOrder: number;
+
   // Hình ảnh
   @OneToMany(() => ProductImage, (image) => image.product, { cascade: true })
   imageList: ProductImage[];
