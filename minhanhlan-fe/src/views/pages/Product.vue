@@ -52,7 +52,6 @@ const lazyParams = ref({
     sortBy: null,
     sortOrder: 'ASC',
     search: '',
-    buildingCode: [],
     apartmentCode: [],
     subdivision: [],
     apartmentEncode: [],
@@ -73,7 +72,6 @@ const lazyParams = ref({
 
 const filters = ref({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    buildingCode: { value: null, matchMode: FilterMatchMode.IN },
     apartmentCode: { value: null, matchMode: FilterMatchMode.IN },
     apartmentEncode: { value: null, matchMode: FilterMatchMode.IN },
     area: { value: null, matchMode: FilterMatchMode.IN },
@@ -152,10 +150,81 @@ const handleSort = (event) => {
     resetData();
 };
 
+const handleRowReorder = async (reorderData) => {
+    console.log('🔄 Row reorder event received:', reorderData);
+
+    try {
+        const { oldIndex, newIndex, draggedItem, newOrder } = reorderData;
+
+        // Validate the reorder data
+        if (!draggedItem || !draggedItem.id) {
+            toast.add({
+                severity: 'error',
+                summary: 'Lỗi',
+                detail: 'Không thể xác định sản phẩm được di chuyển',
+                life: 3000
+            });
+            return;
+        }
+
+        // Show loading state
+        const loadingToastId = Date.now();
+        toast.add({
+            id: loadingToastId,
+            severity: 'info',
+            summary: 'Đang lưu thứ tự...',
+            detail: `Di chuyển "${draggedItem.apartmentCode}" từ vị trí ${oldIndex + 1} đến ${newIndex + 1}`,
+            life: 5000
+        });
+
+        // Update local state immediately for better UX
+        const updatedProducts = [...virtualProducts.value];
+        const [movedItem] = updatedProducts.splice(oldIndex, 1);
+        updatedProducts.splice(newIndex, 0, movedItem);
+        virtualProducts.value = updatedProducts;
+
+        // Filter out placeholder items and prepare API call
+        const orderUpdates = newOrder.filter((item) => item.id && !item.id.startsWith('placeholder-'));
+
+        // Call API endpoint to save the order
+        await productService.updateProductOrders({
+            apartmentType: apartmentType.value,
+            subdivision: subdivision.value,
+            orderUpdates
+        });
+
+        // Clear loading toast
+        toast.remove(loadingToastId);
+
+        // Show success message
+        toast.add({
+            severity: 'success',
+            summary: 'Thành công',
+            detail: `Đã cập nhật thứ tự cho "${draggedItem.apartmentCode}"`,
+            life: 3000
+        });
+
+        // Optionally refresh data to ensure consistency
+        // Comment out if you want to keep optimistic updates
+        // resetData();
+    } catch (error) {
+        console.error('❌ Error updating row order:', error);
+
+        // Revert local changes on error
+        resetData();
+
+        toast.add({
+            severity: 'error',
+            summary: 'Lỗi',
+            detail: 'Không thể cập nhật thứ tự. Đã khôi phục trạng thái ban đầu.',
+            life: 5000
+        });
+    }
+};
+
 const handleFilter = () => {
     if (!isInitialized.value) return;
 
-    lazyParams.value.buildingCode = filters.value['buildingCode'].value;
     lazyParams.value.apartmentCode = filters.value['apartmentCode'].value;
     lazyParams.value.apartmentEncode = filters.value['apartmentEncode'].value;
     lazyParams.value.area = filters.value['area'].value;
@@ -443,7 +512,6 @@ function onSort(event) {
 function resetFilters() {
     filters.value = {
         global: { value: null, matchMode: FilterMatchMode.CONTAINS },
-        buildingCode: { value: null, matchMode: FilterMatchMode.IN },
         apartmentCode: { value: null, matchMode: FilterMatchMode.IN },
         apartmentEncode: { value: null, matchMode: FilterMatchMode.IN },
         area: { value: null, matchMode: FilterMatchMode.IN },
@@ -461,7 +529,6 @@ function resetFilters() {
 
     // Reset lazy params filters
     lazyParams.value.search = '';
-    lazyParams.value.buildingCode = [];
     lazyParams.value.apartmentCode = [];
     lazyParams.value.apartmentEncode = [];
     lazyParams.value.area = [];
@@ -596,7 +663,6 @@ const loadProductsLazy = async (event) => {
 };
 
 const filterOptions = ref({
-    buildingCode: [],
     apartmentCode: [],
     apartmentEncode: [],
     area: [],
@@ -667,7 +733,6 @@ async function fetchFilterOptions() {
 }
 
 const form = ref({
-    buildingCode: '',
     apartmentCode: '',
     apartmentType: apartmentType.value,
     subdivision: subdivision.value,
@@ -712,7 +777,6 @@ const formatPhone = (field) => {
 };
 
 const validateForm = () => {
-    errors.buildingCode = !form.value.buildingCode ? 'Vui lòng nhập mã tòa' : '';
     errors.apartmentCode = !form.value.apartmentCode ? 'Vui lòng nhập mã căn' : '';
     errors.area = !form.value.area ? 'Vui lòng nhập diện tích' : '';
     errors.sellingPrice = !form.value.sellingPrice ? 'Vui lòng nhập giá bán' : '';
@@ -724,7 +788,6 @@ const onFilter = () => {
     // Chỉ filter khi đã khởi tạo
     if (!isInitialized.value) return;
 
-    lazyParams.value.buildingCode = filters.value['buildingCode'].value;
     lazyParams.value.apartmentCode = filters.value['apartmentCode'].value;
     lazyParams.value.apartmentEncode = filters.value['apartmentEncode'].value;
     lazyParams.value.area = filters.value['area'].value;
@@ -790,7 +853,6 @@ async function submit() {
 
 function openNew() {
     form.value = {
-        buildingCode: '',
         apartmentCode: '',
         apartmentType: apartmentType.value,
         subdivision: subdivision.value,
@@ -926,7 +988,6 @@ const getMe = async () => {
 };
 
 const columnDefaults = ref([
-    // { key: 'buildingCode', label: 'Mã tòa', frozen: true, mobileFrozen: false, width: 7, mobileWidth: 6, filterable: true, maxWidth: 8 },
     { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4, maxWidth: 8 },
     { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4 },
     { key: 'area', label: 'S', type: 's', width: 5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
@@ -1090,7 +1151,7 @@ const getColumnStyle = computed(() => {
                 <template #start>
                     <div class="flex flex-wrap gap-2">
                         <Button label="Thêm" icon="pi pi-plus" severity="secondary" size="small" @click="openNew" class="text-sm" />
-                        <Button label="Xóa" icon="pi pi-trash" severity="secondary" size="small" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" class="text-sm" />
+                        <Button label="Xóa" v-if="isAdmin" icon="pi pi-trash" severity="secondary" size="small" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" class="text-sm" />
                     </div>
                 </template>
                 <template #end>
@@ -1100,7 +1161,6 @@ const getColumnStyle = computed(() => {
                 </template>
             </Toolbar>
 
-            <!-- Sử dụng ProductDataTable component -->
             <ProductDataTable
                 ref="mainDataTable"
                 :virtual-products="virtualProducts"
@@ -1114,7 +1174,6 @@ const getColumnStyle = computed(() => {
                 :is-mobile="isMobile"
                 :is-admin="isAdmin"
                 :lazy-params="lazyParams"
-                scroll-height="600px"
                 @sort="handleSort"
                 @filter="handleFilter"
                 @refresh="handleRefresh"
@@ -1123,17 +1182,12 @@ const getColumnStyle = computed(() => {
                 @edit-product="handleEditProduct"
                 @delete-product="handleDeleteProduct"
                 @lazy-load="handleLazyLoad"
+                @row-reorder="handleRowReorder"
             />
         </div>
 
         <Dialog v-model:visible="productDialog" class="w-[90vw] sm:w-[500px] md:w-[600px]" header="Thông tin căn hộ" :modal="true">
             <form @submit.prevent="submit" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="flex flex-col gap-y-2">
-                    <label>Mã tòa <span class="text-red-500">*</span></label>
-                    <InputText v-model="form.buildingCode" :invalid="!!errors.buildingCode" class="w-full" />
-                    <small v-if="errors.buildingCode" class="text-red-500">{{ errors.buildingCode }}</small>
-                </div>
-
                 <div class="flex flex-col gap-y-2">
                     <label>Mã căn <span class="text-red-500">*</span></label>
                     <InputText v-model="form.apartmentCode" class="w-full" :invalid="!!errors.apartmentCode" @input="updateEncode" />
@@ -1157,7 +1211,7 @@ const getColumnStyle = computed(() => {
                     <small v-if="errors.sellingPrice" class="text-red-500">{{ errors.sellingPrice }}</small>
                 </div>
 
-                <div class="flex flex-col gap-y-2">
+                <div class="flex flex-col gap-y-2 md:col-span-2">
                     <label>Thuế phí</label>
                     <InputNumber v-model="form.tax" :minFractionDigits="0" :maxFractionDigits="2" :useGrouping="true" suffix=" triệu" inputClass="text-right w-full" class="w-full" />
                 </div>
@@ -1238,7 +1292,7 @@ const getColumnStyle = computed(() => {
         <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
             <div class="responsive-zoom-table">
                 <ProductDataTable
-                    ref="fullscreenDataTable"
+                    ref="mainDataTable"
                     :virtual-products="virtualProducts"
                     v-model:selected-products="selectedProducts"
                     :filters="filters"
@@ -1250,16 +1304,15 @@ const getColumnStyle = computed(() => {
                     :is-mobile="isMobile"
                     :is-admin="isAdmin"
                     :lazy-params="lazyParams"
-                    scroll-height="flex"
-                    table-class="p-datatable-sm"
-                    :is-fullscreen="true"
                     @sort="handleSort"
                     @filter="handleFilter"
                     @refresh="handleRefresh"
+                    @fullscreen="handleFullscreen"
                     @show-images="handleShowImages"
                     @edit-product="handleEditProduct"
                     @delete-product="handleDeleteProduct"
                     @lazy-load="handleLazyLoad"
+                    @row-reorder="handleRowReorder"
                 />
             </div>
         </Drawer>

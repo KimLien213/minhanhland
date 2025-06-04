@@ -1,3 +1,4 @@
+<!-- src/components/ProductDataTable.vue - Fixed SortableJS -->
 <template>
     <DataTable
         ref="dt"
@@ -10,12 +11,11 @@
         resizableColumns
         columnResizeMode="expand"
         stripedRows
-        reorderableColumns
         scrollable
-        :scrollHeight="scrollHeight"
+        :scrollHeight="'750px'"
         scrollDirection="horizontal"
         filterDisplay="menu"
-        tableStyle="min-width: 50rem"
+        tableStyle="min-width: 100%; width: 100%;"
         :virtualScrollerOptions="{
             lazy: true,
             onLazyLoad: loadProductsLazy,
@@ -29,9 +29,9 @@
         :sortField="currentSort.sortBy"
         :sortOrder="currentSort.sortOrder === 'ASC' ? 1 : -1"
         @columnReorder="onColumnReorder"
-        @sort="$emit('sort', $event)"
+        @sort="!isDragMode && $emit('sort', $event)"
         @filter="$emit('filter')"
-        :class="tableClass"
+        :class="[tableClass, 'sortable-datatable', { 'drag-mode': isDragMode }]"
     >
         <template #empty>
             <span>Không có căn hộ nào.</span>
@@ -41,25 +41,72 @@
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full">
                 <div class="flex items-start gap-2">
                     <span class="text-sm font-bold">Tổng số: {{ totalRecords }} căn hộ</span>
+                    <div class="flex items-center gap-2" v-if="isDragMode">
+                        <Tag value="Chế độ kéo thả" severity="success" size="small" />
+                        <i class="pi pi-arrows-v text-green-500 animate-pulse"></i>
+                    </div>
                 </div>
                 <div class="flex items-end gap-2">
                     <IconField class="w-full">
                         <InputIcon>
                             <i class="pi pi-search" />
                         </InputIcon>
-                        <InputText v-model="filters.global.value" class="w-full" placeholder="Tìm kiếm..." />
+                        <InputText v-model="filters.global.value" class="w-full" placeholder="Tìm kiếm..." :disabled="isDragMode" />
                     </IconField>
-                    <Button type="button" @click="$emit('refresh')" icon="pi pi-refresh" text />
-                    <Button v-if="!isFullscreen" type="button" icon="pi pi-window-maximize" @click="$emit('fullscreen')" text />
+
+                    <!-- Toggle Drag Mode Button -->
+                    <Button
+                        v-if="isAdmin"
+                        type="button"
+                        :icon="isDragMode ? 'pi pi-times' : 'pi pi-arrows-v'"
+                        :severity="isDragMode ? 'danger' : 'success'"
+                        :outlined="!isDragMode"
+                        @click="toggleDragMode"
+                        v-tooltip.top="isDragMode ? 'Tắt chế độ kéo thả' : 'Bật chế độ kéo thả'"
+                        text
+                    />
+
+                    <Button type="button" @click="$emit('refresh')" icon="pi pi-refresh" text :disabled="isDragMode" />
+                    <Button v-if="!isFullscreen" type="button" icon="pi pi-window-maximize" @click="$emit('fullscreen')" text :disabled="isDragMode" />
                 </div>
             </div>
         </template>
 
         <!-- Selection Column -->
         <Column selectionMode="multiple" :frozen="!isMobile" style="width: 2rem; height: 60px" :exportable="false">
+            <template #body="{ data }">
+                <div v-if="!data || data.isPlaceholder" class="flex items-center" style="height: 17px">
+                    <Skeleton width="100%" height="1rem" />
+                </div>
+                <div v-else>
+                    <Checkbox :modelValue="isSelected(data)" @update:modelValue="toggleSelection(data, $event)" :disabled="isDragMode" />
+                </div>
+            </template>
             <template #loading>
                 <div class="flex items-center" style="height: 17px; flex-grow: 1; overflow: hidden">
                     <Skeleton width="100%" height="1rem" />
+                </div>
+            </template>
+        </Column>
+
+        <!-- Drag Handle Column - Only show when in drag mode -->
+        <Column v-if="isDragMode" header="" :frozen="!isMobile" style="width: 3rem; height: 60px" :exportable="false" :sortable="false">
+            <template #header>
+                <div class="flex items-center justify-center">
+                    <i class="pi pi-bars text-muted-color"></i>
+                </div>
+            </template>
+            <template #body="{ data }">
+                <div v-if="!data || data.isPlaceholder" class="flex items-center justify-center" style="height: 17px">
+                    <Skeleton width="1.5rem" height="1rem" />
+                </div>
+                <div v-else class="sortable-handle flex items-center justify-center cursor-grab active:cursor-grabbing p-2 rounded hover:bg-surface-100">
+                    <i class="pi pi-bars text-muted-color"></i>
+                </div>
+            </template>
+            <template #loading>
+                <div class="flex items-center justify-center" style="height: 17px">
+                    <Skeleton width="1.5rem" height="1rem" />
                 </div>
             </template>
         </Column>
@@ -81,7 +128,7 @@
         <!-- Dynamic Columns -->
         <Column
             v-for="item in columns"
-            :sortable="item.sortable !== false && isAdmin"
+            :sortable="item.sortable !== false && isAdmin && !isDragMode"
             :key="item.key"
             :sortField="item.key"
             :showFilterMatchModes="false"
@@ -134,11 +181,11 @@
 
                     <!-- Luôn có container cho icon, dù có filter hay không -->
                     <div class="w-4 h-4 flex items-center justify-center">
-                        <i v-if="item.filterable" class="pi pi-filter cursor-pointer text-xs" :class="filters[item.key]?.value?.length ? 'text-blue-500' : 'text-gray-400 hover:text-gray-700'" @click.stop="toggleFilter(item.key)"></i>
+                        <i v-if="item.filterable && !isDragMode" class="pi pi-filter cursor-pointer text-xs" :class="filters[item.key]?.value?.length ? 'text-blue-500' : 'text-gray-400 hover:text-gray-700'" @click.stop="toggleFilter(item.key)"></i>
                     </div>
 
                     <MultiSelect
-                        v-if="item.filterable"
+                        v-if="item.filterable && !isDragMode"
                         :ref="(el) => setMultiSelectRef(item.key, el)"
                         v-model="filters[item.key].value"
                         :options="filterOptions[item.key]"
@@ -183,7 +230,10 @@
         </Column>
 
         <!-- Actions Column -->
-        <Column :exportable="false" style="min-width: 12rem; height: 60px">
+        <Column :exportable="false" v-if="isAdmin" style="min-width: 120px; width: 120px; max-width: 120px" headerStyle="min-width: 120px; width: 120px;" bodyStyle="min-width: 120px; width: 120px;">
+            <template #header>
+                <span class="font-bold">Thao tác</span>
+            </template>
             <template #body="{ data }">
                 <!-- Skeleton cho placeholder -->
                 <div v-if="!data || data.isPlaceholder" class="flex items-center gap-2" style="height: 17px">
@@ -191,9 +241,9 @@
                     <Skeleton width="2rem" height="2rem" class="rounded-full" />
                 </div>
                 <!-- Action buttons -->
-                <div v-else class="flex items-center gap-2">
-                    <Button icon="pi pi-pencil" outlined rounded size="small" @click="$emit('edit-product', data)" />
-                    <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="$emit('delete-product', data)" />
+                <div v-else class="flex items-center gap-2 justify-center">
+                    <Button icon="pi pi-pencil" outlined rounded size="small" @click="$emit('edit-product', data)" :disabled="isDragMode" />
+                    <Button icon="pi pi-trash" outlined rounded size="small" severity="danger" @click="$emit('delete-product', data)" :disabled="isDragMode" />
                 </div>
             </template>
         </Column>
@@ -202,7 +252,8 @@
 
 <script setup>
 import { format } from 'date-fns';
-import { computed, nextTick, reactive } from 'vue';
+import Sortable from 'sortablejs';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
 // Props
 const props = defineProps({
@@ -223,10 +274,30 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['update:selectedProducts', 'sort', 'filter', 'refresh', 'fullscreen', 'show-images', 'edit-product', 'delete-product', 'lazy-load']);
+const emit = defineEmits(['update:selectedProducts', 'sort', 'filter', 'refresh', 'fullscreen', 'show-images', 'edit-product', 'delete-product', 'lazy-load', 'row-reorder']);
 
-// Reactive refs for MultiSelect
+// Reactive refs for MultiSelect and SortableJS
 const multiSelectRefs = reactive({});
+const dt = ref(null);
+const sortableInstance = ref(null);
+const isDragMode = ref(false);
+
+// Selection management
+const isSelected = (data) => {
+    return props.selectedProducts.some((item) => item.id === data.id);
+};
+
+const toggleSelection = (data, selected) => {
+    let newSelection = [...props.selectedProducts];
+    if (selected) {
+        if (!newSelection.find((item) => item.id === data.id)) {
+            newSelection.push(data);
+        }
+    } else {
+        newSelection = newSelection.filter((item) => item.id !== data.id);
+    }
+    emit('update:selectedProducts', newSelection);
+};
 
 // Methods
 const loadProductsLazy = (event) => {
@@ -289,8 +360,324 @@ const clearFilter = (key) => {
     emit('filter');
 };
 
+// SortableJS Integration - FIXED VERSION
+const initializeSortable = () => {
+    if (!dt.value || !isDragMode.value) return;
+
+    // Wait for DOM to be ready
+    nextTick(() => {
+        const tableBody = dt.value.$el.querySelector('.p-datatable-tbody');
+        if (!tableBody) {
+            console.warn('Table body not found');
+            return;
+        }
+
+        // Destroy existing instance if any
+        destroySortable();
+
+        // Create new Sortable instance
+        sortableInstance.value = Sortable.create(tableBody, {
+            handle: '.sortable-handle', // Changed from .drag-handle to .sortable-handle
+            animation: 200,
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            ghostClass: 'sortable-ghost',
+            forceFallback: true, // Force HTML5 DnD fallback
+            fallbackClass: 'sortable-fallback',
+            fallbackOnBody: true,
+            swapThreshold: 0.65,
+
+            // Filter out placeholder rows and empty message
+            filter: (evt, item) => {
+                const rowData = props.virtualProducts[item.rowIndex];
+                return !rowData || rowData.isPlaceholder;
+            },
+
+            onStart: (evt) => {
+                console.log('🎯 Drag started:', evt.oldIndex);
+                document.body.classList.add('is-dragging');
+
+                // Disable text selection during drag
+                document.body.style.userSelect = 'none';
+            },
+
+            onEnd: (evt) => {
+                console.log('🎯 Drag ended:', evt.oldIndex, '->', evt.newIndex);
+                document.body.classList.remove('is-dragging');
+                document.body.style.userSelect = '';
+
+                // Only emit if position actually changed and indices are valid
+                if (evt.oldIndex !== evt.newIndex && evt.oldIndex >= 0 && evt.newIndex >= 0 && evt.oldIndex < props.virtualProducts.length && evt.newIndex < props.virtualProducts.length) {
+                    const draggedItem = props.virtualProducts[evt.oldIndex];
+
+                    // Skip if dragged item is placeholder
+                    if (!draggedItem || draggedItem.isPlaceholder) {
+                        console.warn('Cannot reorder placeholder items');
+                        return;
+                    }
+
+                    console.log('🔄 Reordering:', {
+                        draggedItem: draggedItem?.apartmentCode || 'Unknown',
+                        oldIndex: evt.oldIndex,
+                        newIndex: evt.newIndex
+                    });
+
+                    // Create new order array
+                    const newOrder = [...props.virtualProducts];
+                    const [movedItem] = newOrder.splice(evt.oldIndex, 1);
+                    newOrder.splice(evt.newIndex, 0, movedItem);
+
+                    // Emit reorder event to parent
+                    emit('row-reorder', {
+                        oldIndex: evt.oldIndex,
+                        newIndex: evt.newIndex,
+                        draggedItem,
+                        newOrder: newOrder
+                            .filter((item) => !item.isPlaceholder)
+                            .map((item, index) => ({
+                                id: item.id,
+                                order: index + 1
+                            }))
+                    });
+                }
+            },
+
+            onMove: (evt) => {
+                // Prevent moving to/from placeholder rows
+                const fromIndex = evt.dragged.rowIndex;
+                const toIndex = evt.related.rowIndex;
+
+                const fromData = props.virtualProducts[fromIndex];
+                const toData = props.virtualProducts[toIndex];
+
+                // Block move if either item is a placeholder
+                if (!fromData || fromData.isPlaceholder || !toData || toData.isPlaceholder) {
+                    return false;
+                }
+
+                return true;
+            }
+        });
+
+        console.log('✅ SortableJS initialized successfully');
+    });
+};
+
+const destroySortable = () => {
+    if (sortableInstance.value) {
+        sortableInstance.value.destroy();
+        sortableInstance.value = null;
+        console.log('🗑️ SortableJS destroyed');
+    }
+};
+
+const toggleDragMode = () => {
+    isDragMode.value = !isDragMode.value;
+
+    if (isDragMode.value) {
+        console.log('🎯 Enabling drag mode');
+        // Wait a bit for the DOM to update with the drag handle column
+        setTimeout(() => {
+            initializeSortable();
+        }, 100);
+    } else {
+        console.log('🎯 Disabling drag mode');
+        destroySortable();
+    }
+};
+
+// Watch for changes that require Sortable reinitialization
+watch(
+    [() => props.virtualProducts.length, isDragMode],
+    ([newLength, newDragMode]) => {
+        if (newDragMode && newLength > 0) {
+            // Reinitialize when products load or drag mode is enabled
+            setTimeout(() => {
+                initializeSortable();
+            }, 200);
+        }
+    },
+    { deep: false }
+);
+
+// Watch for virtual products changes when in drag mode
+watch(
+    () => props.virtualProducts,
+    () => {
+        if (isDragMode.value) {
+            // Reinitialize sortable when virtual products change
+            setTimeout(() => {
+                initializeSortable();
+            }, 100);
+        }
+    },
+    { deep: false }
+);
+
+// Lifecycle
+onMounted(() => {
+    console.log('📦 ProductDataTable mounted');
+});
+
+onUnmounted(() => {
+    destroySortable();
+    document.body.classList.remove('is-dragging');
+    document.body.style.userSelect = '';
+});
+
 // Expose refs
 defineExpose({
-    dt: () => dt.value
+    dt: () => dt.value,
+    toggleDragMode,
+    isDragMode: () => isDragMode.value
 });
 </script>
+
+<style scoped>
+/* Drag Mode Styling */
+:deep(.sortable-datatable) {
+    position: relative;
+    width: 100%;
+}
+
+:deep(.sortable-datatable .p-datatable-wrapper) {
+    overflow-x: auto;
+    width: 100%;
+}
+
+:deep(.sortable-datatable .p-datatable-table) {
+    min-width: 100%;
+    table-layout: auto;
+}
+
+:deep(.sortable-datatable.drag-mode .p-sortable-column .p-column-header-content) {
+    cursor: default !important;
+}
+
+/* Fix table layout and scrolling */
+:deep(.p-datatable) {
+    width: 100%;
+    overflow: visible;
+}
+
+:deep(.p-datatable-wrapper) {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    width: 100% !important;
+}
+
+:deep(.p-datatable-table) {
+    width: 100% !important;
+    min-width: fit-content !important;
+}
+
+/* Sortable Handle Styling */
+.sortable-handle {
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    cursor: grab;
+    user-select: none;
+}
+
+.sortable-handle:hover {
+    background-color: var(--surface-200) !important;
+    transform: scale(1.1);
+}
+
+.sortable-handle:active {
+    cursor: grabbing !important;
+}
+
+/* Sortable States */
+:deep(.sortable-chosen) {
+    opacity: 0.8;
+    transform: scale(1.02);
+    background-color: var(--surface-100) !important;
+}
+
+:deep(.sortable-drag) {
+    opacity: 0.9;
+    transform: rotate(2deg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+    background: white !important;
+    border: 2px solid var(--primary-color) !important;
+    z-index: 1000 !important;
+}
+
+:deep(.sortable-ghost) {
+    opacity: 0.3;
+    background: var(--primary-50) !important;
+    border: 2px dashed var(--primary-color) !important;
+}
+
+:deep(.sortable-fallback) {
+    opacity: 0.8;
+    background: white !important;
+    border: 2px solid var(--primary-color) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Global drag state */
+:global(.is-dragging) {
+    cursor: grabbing !important;
+    user-select: none !important;
+}
+
+:global(.is-dragging *) {
+    pointer-events: none !important;
+}
+
+:global(.is-dragging .sortable-handle) {
+    pointer-events: all !important;
+}
+
+/* Row hover effects when in drag mode */
+:deep(.sortable-datatable.drag-mode .p-datatable-tbody tr:hover) {
+    background-color: var(--surface-100) !important;
+}
+
+/* Disable selection while dragging */
+:deep(.sortable-datatable .p-datatable-tbody tr.sortable-chosen .p-checkbox) {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Animation for smooth transitions */
+:deep(.p-datatable-tbody tr) {
+    transition: all 0.2s ease;
+}
+
+/* Prevent text selection during drag */
+:deep(.sortable-datatable.drag-mode) {
+    user-select: none;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .sortable-handle {
+        padding: 0.75rem;
+        min-width: 3rem;
+    }
+
+    .sortable-handle i {
+        font-size: 1.1rem;
+    }
+}
+
+/* Accessibility improvements */
+.sortable-handle:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Loading state adjustments */
+:deep(.p-datatable-loading .sortable-handle) {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Disable virtual scrolling animations during drag */
+:deep(.is-dragging .p-datatable-tbody) {
+    transform: none !important;
+}
+</style>

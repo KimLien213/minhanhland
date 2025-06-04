@@ -29,6 +29,14 @@ export const productService = {
     },
 
     /**
+     * Cập nhật thứ tự sản phẩm
+     * @param {Object} orderData
+     */
+    updateProductOrders(orderData) {
+        return axiosInstance.patch(`${BASE_URL}/update-order`, orderData);
+    },
+
+    /**
      * Xoá sản phẩm theo ID
      * @param {number|string} id
      */
