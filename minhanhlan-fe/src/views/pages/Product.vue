@@ -761,8 +761,21 @@ const statusOptions = [
 const updateEncode = () => {
     const code = form.value.apartmentCode || '';
     if (code.length >= 3) {
-        const index = code.length - 3;
-        form.value.apartmentEncode = code.substring(0, index) + 'x' + code.substring(index + 1);
+        // Tìm vị trí của các ký tự số từ cuối lên
+        let digitPositions = [];
+        for (let i = code.length - 1; i >= 0; i--) {
+            if (/\d/.test(code[i])) {
+                digitPositions.push(i);
+            }
+        }
+
+        // Nếu có ít nhất 3 số thì thay thế số thứ 3 từ cuối
+        if (digitPositions.length >= 3) {
+            const targetIndex = digitPositions[2]; // Số thứ 3 từ cuối (index 2)
+            form.value.apartmentEncode = code.substring(0, targetIndex) + 'x' + code.substring(targetIndex + 1);
+        } else {
+            form.value.apartmentEncode = '';
+        }
     } else {
         form.value.apartmentEncode = '';
     }
@@ -1276,7 +1289,7 @@ const getColumnStyle = computed(() => {
 
                 <div class="flex flex-col gap-y-2">
                     <label>Mã căn (mã hóa)</label>
-                    <InputText v-model="form.apartmentEncode" class="w-full" disabled />
+                    <InputText v-model="form.apartmentEncode" class="w-full" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
@@ -1340,7 +1353,7 @@ const getColumnStyle = computed(() => {
             <MobilePasteFileUpload
                 :initial-files="initialImages"
                 :multiple="true"
-                :max-file-size="50000000"
+                :max-file-size="500000000"
                 accept="image/*,video/*,.mp4,.avi,.mov,.wmv,.webm,.ogg,.mkv,.flv,.m4v,.3gp,.jpg,.jpeg,.png,.gif,.webp,.bmp"
                 label="Hình ảnh & Video"
                 :support-video="true"

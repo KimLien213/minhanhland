@@ -259,7 +259,7 @@ export class ProductService {
 
     if (query.search) {
       builder.andWhere(
-        '(product.apartmentCode LIKE :search OR product.buildingCode LIKE :search OR product.contactInfo LIKE :search)',
+        '(product.apartmentCode LIKE :search OR product.apartmentEncode LIKE :search OR product.contactInfo LIKE :search)',
         { search: `%${query.search}%` },
       );
     }

@@ -8,10 +8,8 @@
 
         <!-- Media Counter -->
         <div class="absolute top-4 left-4 z-20 bg-black bg-opacity-50 text-white px-4 py-2 rounded text-lg">
-            {{ currentMediaIndex + 1 }} / {{ media.length }}
-            <span v-if="getCurrentMedia" class="ml-2 text-sm opacity-75">
-                {{ isCurrentVideo ? '📹' : '🖼️' }}
-            </span>
+            <span>{{ currentMediaIndex + 1 }} / {{ media.length }}</span>
+            <Button class="ml-2" type="button" icon="pi pi-download" severity="secondary" variant="text" rounded @click.stop="downloadCurrentMedia" />
         </div>
 
         <!-- Media Type Indicator -->
@@ -124,10 +122,16 @@ const currentMediaIndex = ref(0);
 const touchStart = ref({ x: 0, y: 0 });
 const touchEnd = ref({ x: 0, y: 0 });
 const currentVideoRef = ref(null);
+const internalShowThumbnails = ref(true);
 
 // Computed - Support both 'media' and 'images' props for backward compatibility
 const mediaList = computed(() => {
     return props.media.length > 0 ? props.media : props.images;
+});
+
+const showThumbnails = computed({
+    get: () => internalShowThumbnails.value && props.showThumbnails,
+    set: (value) => (internalShowThumbnails.value = value)
 });
 
 const getCurrentMedia = computed(() => {
@@ -161,6 +165,90 @@ const isVideo = (mediaItem) => {
     }
 
     return false;
+};
+
+// Download functionality
+const downloadCurrentMedia = async () => {
+    const currentMedia = getCurrentMedia.value;
+    if (!currentMedia) {
+        console.error('No media to download');
+        return;
+    }
+
+    try {
+        const url = currentMedia.src;
+        const filename = currentMedia.name || currentMedia.alt || generateFileName(currentMedia);
+
+        // Try using the download link method first
+        if (url.startsWith('blob:') || url.startsWith('data:')) {
+            // For blob URLs or data URLs, use direct download
+            await downloadFile(url, filename);
+        } else {
+            // For external URLs, fetch first then download
+            await downloadFileFromUrl(url, filename);
+        }
+
+        console.log('Download initiated for:', filename);
+    } catch (error) {
+        console.error('Download failed:', error);
+
+        // Fallback: open in new window
+        try {
+            window.open(currentMedia.src, '_blank');
+        } catch (fallbackError) {
+            console.error('Fallback download also failed:', fallbackError);
+        }
+    }
+};
+
+const generateFileName = (media) => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const extension = isVideo(media) ? 'mp4' : 'jpg';
+    const type = isVideo(media) ? 'video' : 'image';
+    return `${type}-${timestamp}.${extension}`;
+};
+
+const downloadFile = (url, filename) => {
+    return new Promise((resolve, reject) => {
+        try {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.style.display = 'none';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            resolve();
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+const downloadFileFromUrl = async (url, filename) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        await downloadFile(blobUrl, filename);
+
+        // Clean up the blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (error) {
+        throw new Error(`Failed to fetch file: ${error.message}`);
+    }
+};
+
+// Toggle thumbnails
+const toggleThumbnails = () => {
+    internalShowThumbnails.value = !internalShowThumbnails.value;
 };
 
 // Methods
@@ -260,6 +348,18 @@ const handleKeydown = (event) => {
                 }
             }
             break;
+        case 'd':
+        case 'D':
+            // Download shortcut
+            event.preventDefault();
+            downloadCurrentMedia();
+            break;
+        case 't':
+        case 'T':
+            // Toggle thumbnails
+            event.preventDefault();
+            toggleThumbnails();
+            break;
     }
 };
 
@@ -276,26 +376,6 @@ const handleTouchMove = (event) => {
         x: event.touches[0].clientX,
         y: event.touches[0].clientY
     };
-};
-
-const handleTouchEnd = (event) => {
-    if (!touchStart.value.x || !touchEnd.value.x) return;
-
-    const deltaX = touchStart.value.x - touchEnd.value.x;
-    const deltaY = touchStart.value.y - touchEnd.value.y;
-
-    // Prevent default swipe behavior
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-        event.preventDefault();
-        if (deltaX > 0) {
-            nextMedia(); // Swipe left
-        } else {
-            prevMedia(); // Swipe right
-        }
-    }
-
-    touchStart.value = { x: 0, y: 0 };
-    touchEnd.value = { x: 0, y: 0 };
 };
 
 // Watchers
@@ -338,6 +418,16 @@ watch(currentMediaIndex, () => {
     });
 });
 
+// Watch for showThumbnails prop changes
+watch(
+    () => props.showThumbnails,
+    (newVal) => {
+        if (!newVal) {
+            internalShowThumbnails.value = false;
+        }
+    }
+);
+
 // Lifecycle
 onMounted(() => {
     document.addEventListener('keydown', handleKeydown);
@@ -347,6 +437,25 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
     document.body.style.overflow = 'auto';
 });
+const handleTouchEnd = (event) => {
+    if (!touchStart.value.x || !touchEnd.value.x) return;
+
+    const deltaX = touchStart.value.x - touchEnd.value.x;
+    const deltaY = touchStart.value.y - touchEnd.value.y;
+
+    // Prevent default swipe behavior
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+        event.preventDefault();
+        if (deltaX > 0) {
+            nextMedia(); // Swipe left
+        } else {
+            prevMedia(); // Swipe right
+        }
+    }
+
+    touchStart.value = { x: 0, y: 0 };
+    touchEnd.value = { x: 0, y: 0 };
+};
 
 // Expose methods for backward compatibility
 defineExpose({
@@ -354,6 +463,8 @@ defineExpose({
     prevMedia,
     goToMedia,
     closeGallery,
+    downloadCurrentMedia,
+    toggleThumbnails,
     // Legacy method names
     nextImage: nextMedia,
     prevImage: prevMedia,
@@ -364,7 +475,7 @@ defineExpose({
 <style scoped>
 /* Video specific styling */
 video {
-    border-radius: 8px;
+    border-radius: 0;
 }
 
 /* Thumbnail video styling */
@@ -375,6 +486,15 @@ video {
 /* Loading states */
 video:not([src]) {
     background: #333;
+}
+
+/* Gallery modal styling */
+.gallery-modal {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
 }
 
 /* Control hints */
@@ -392,16 +512,113 @@ video:not([src]) {
     }
 }
 
+/* Smooth transitions */
+.media-transition {
+    transition: all 0.3s ease;
+}
+
+/* Download button animation */
+.download-btn {
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.download-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+.download-btn:active {
+    transform: scale(0.95);
+}
+
+/* Center download button pulse */
+.pulse-download {
+    animation: pulseDownload 2s infinite;
+}
+
+@keyframes pulseDownload {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7);
+        transform: translateX(-50%) scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 20px rgba(220, 38, 38, 0);
+        transform: translateX(-50%) scale(1.1);
+    }
+}
+
+/* Large download button */
+.download-btn-large {
+    animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+    0%,
+    20%,
+    50%,
+    80%,
+    100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    60% {
+        transform: translateY(-5px);
+    }
+}
+
+/* Thumbnail scrollbar styling */
+.thumbnail-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.thumbnail-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+}
+
+.thumbnail-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+}
+
+.thumbnail-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
-    video {
-        max-height: 70vh;
-        max-width: 95vw;
+    video,
+    img {
+        max-height: calc(100vh - 120px) !important;
+        max-width: 100vw !important;
     }
 
     .thumbnail-container {
         width: 60px;
         height: 60px;
+    }
+
+    /* Hide thumbnails on very small screens */
+    @media (max-height: 500px) {
+        .thumbnail-container {
+            display: none;
+        }
+    }
+
+    /* Landscape mode adjustments */
+    @media (orientation: landscape) and (max-height: 500px) {
+        .shrink-0 {
+            padding: 0.5rem;
+        }
+
+        video,
+        img {
+            max-height: calc(100vh - 80px) !important;
+        }
     }
 }
 
@@ -411,8 +628,19 @@ button:focus {
     outline-offset: 2px;
 }
 
-/* Smooth transitions */
-.media-transition {
-    transition: all 0.3s ease;
+/* Loading state for images/videos */
+.loading-placeholder {
+    background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
 </style>

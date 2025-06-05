@@ -29,7 +29,7 @@ export class ProductController {
   constructor(private readonly productService: ProductService) { }
 
   @Post()
-  @UseInterceptors(FilesInterceptor('images', 10, {
+  @UseInterceptors(FilesInterceptor('images', 30, {
     storage: diskStorage({
       destination: './uploads/products',
       filename: (req, file, cb) => {
@@ -43,7 +43,7 @@ export class ProductController {
   }
 
   @Put(':id')
-  @UseInterceptors(FilesInterceptor('images', 10, {
+  @UseInterceptors(FilesInterceptor('images', 30, {
     storage: diskStorage({
       destination: './uploads/products',
       filename: (req, file, cb) => {

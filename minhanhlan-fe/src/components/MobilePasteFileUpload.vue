@@ -49,7 +49,7 @@
 
                             <!-- Video preview -->
                             <div v-else-if="isVideo(file)" class="w-full h-full relative bg-gray-800 flex items-center justify-center group">
-                                <video :src="file.url" class="w-full h-full object-cover" muted preload="metadata" @error="handleVideoError(file)" @loadedmetadata="handleVideoLoaded(file)">
+                                <video :src="file.url" class="w-full h-full object-cover" muted preload="metadata">
                                     <source :src="file.url" :type="file.type || getVideoType(file.url)" />
                                 </video>
                                 <div class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 group-hover:bg-opacity-60 transition-opacity cursor-pointer" @click="playVideo(file.url)">
