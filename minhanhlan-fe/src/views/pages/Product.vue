@@ -838,7 +838,7 @@ async function submit() {
 
     // Add initial image IDs (for updates)
     initialImages.value.forEach((img) => {
-        data.append('imageIds', img.id);
+        data.append('imageIds[]', img.id);
     });
     try {
         if (!form.value.id) {
@@ -1001,17 +1001,17 @@ const getMe = async () => {
 };
 
 const columnDefaults = ref([
-    { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4, maxWidth: 8 },
-    { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4 },
+    { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 4.5, mobileWidth: 4, maxWidth: 8 },
+    { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: true, width: 4.5, mobileWidth: 4 },
     { key: 'area', label: 'S', type: 's', width: 5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
     { key: 'sellingPrice', label: 'Giá bán', width: 6, maxWidth: 6.5 },
     { key: 'tax', label: 'Thuế phí', type: 'money', width: 6, maxWidth: 6 },
     { key: 'furnitureNote', label: 'Nội thất', width: 7.5, filterable: true, maxWidth: 8 },
     { key: 'mortgageInfo', label: 'TT Sổ đỏ + Vay', width: 11, filterable: true, maxWidth: 15 },
     { key: 'description', label: 'Lưu ý', width: 10, maxWidth: 12 },
+    { key: 'imageList', label: 'Hình ảnh', type: 'images', width: 8, sortable: false },
     { key: 'balconyDirection', label: 'Ban công', type: 'tag', color: (value) => getDirectionColor(value), width: 8, filterable: true },
     { key: 'updatedAt', label: 'Ngày cập nhật', type: 'date', width: 8 },
-    { key: 'imageList', label: 'Hình ảnh', type: 'images', width: 8, sortable: false },
     {
         key: 'status',
         label: 'Trạng thái',
@@ -1395,7 +1395,7 @@ const getColumnStyle = computed(() => {
         <Drawer v-model:visible="fullScreen" header="Danh sách căn hộ" position="full">
             <div class="responsive-zoom-table">
                 <ProductDataTable
-                    ref="mainDataTable"
+                    ref="responsiveDataTable"
                     :virtual-products="virtualProducts"
                     v-model:selected-products="selectedProducts"
                     :filters="filters"

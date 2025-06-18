@@ -166,39 +166,67 @@ const isVideo = (mediaItem) => {
 
     return false;
 };
-
-// Download functionality
-const downloadCurrentMedia = async () => {
-    const currentMedia = getCurrentMedia.value;
-    if (!currentMedia) {
-        console.error('No media to download');
-        return;
+const downloadCurrentMedia = async (event) => {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
     }
 
-    try {
-        const url = currentMedia.src;
-        const filename = currentMedia.name || currentMedia.alt || generateFileName(currentMedia);
+    const currentMedia = getCurrentMedia.value;
+    if (!currentMedia) {
+        alert('Không có file để tải');
+        return false;
+    }
 
-        // Try using the download link method first
-        if (url.startsWith('blob:') || url.startsWith('data:')) {
-            // For blob URLs or data URLs, use direct download
-            await downloadFile(url, filename);
-        } else {
-            // For external URLs, fetch first then download
-            await downloadFileFromUrl(url, filename);
+    const url = currentMedia.src;
+    const filename = currentMedia.name || currentMedia.alt || generateFileName(currentMedia);
+
+    const isWebApp = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const file = new File([blob], filename, { type: blob.type });
+
+        // Trường hợp WebApp trên iOS → dùng Share API để cho phép Lưu ảnh
+        if (isWebApp && isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: filename,
+                text: 'Chia sẻ hoặc lưu ảnh'
+            });
+            return false;
         }
 
-        console.log('Download initiated for:', filename);
+        // Trình duyệt thường → download như thường
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (error) {
         console.error('Download failed:', error);
 
-        // Fallback: open in new window
-        try {
-            window.open(currentMedia.src, '_blank');
-        } catch (fallbackError) {
-            console.error('Fallback download also failed:', fallbackError);
+        if (isWebApp) {
+            // WebApp fallback: copy URL
+            try {
+                await navigator.clipboard.writeText(url);
+                alert('Không thể tải file, đã copy link vào clipboard');
+            } catch {
+                prompt('Không thể tải file. Sao chép link để tải:', url);
+            }
+        } else {
+            // Trình duyệt fallback: mở tab mới
+            window.open(url, '_blank');
         }
     }
+
+    return false;
 };
 
 const generateFileName = (media) => {

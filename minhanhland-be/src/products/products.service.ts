@@ -137,7 +137,6 @@ export class ProductService {
 
     Object.assign(product, dto);
     product.imageList = [];
-    log(order)
     product.sortOrder = order;
 
     if (dto.imageIds?.length) {

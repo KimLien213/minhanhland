@@ -41,6 +41,11 @@ export default defineConfig({
             }
         }),
     ],
+    server: {
+        host: '0.0.0.0',       // Cho phép truy cập từ IP bên ngoài
+        port: 5173,            // Hoặc cổng bạn muốn
+        strictPort: true,      // Đảm bảo không thay cổng nếu bị trùng
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))

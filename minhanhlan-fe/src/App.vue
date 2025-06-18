@@ -1,4 +1,5 @@
 <script setup>
+import GlobalLoading from '@/components/GlobalLoading.vue';
 import { setToastInstance } from '@/plugin/toast';
 import { authService } from '@/service/AuthService';
 import { useMenuStore } from '@/stores/menuStore';
@@ -70,6 +71,7 @@ async function handleRootRedirect() {
 
 <template>
     <router-view />
+    <GlobalLoading />
 </template>
 
 <style scoped></style>
