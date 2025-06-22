@@ -13,4 +13,8 @@ export class CreateProductFieldPermissionDto {
   @IsArray()
   @IsUUID('all', { each: true })
   productIds: string[];
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  menuIds: string[];
 }

@@ -21,4 +21,7 @@ export class ProductFieldPermission extends BaseEntity {
 
   @Column('json', { name: 'product_ids',  nullable: true })
   productIds: string[];
+
+  @Column('json', { name: 'menu_ids',  nullable: true })
+  menuIds: string[];
 }

@@ -2,7 +2,6 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-import { log } from 'console';
 import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
 import { UsersService } from 'src/users/users.service';
 import { Repository } from 'typeorm';
@@ -49,6 +48,7 @@ export class AuthService {
       permissions: {
         fieldNames: permission?.fieldNames || [],
         productIds: permission?.productIds || [],
+        menuIds: permission?.menuIds || [],
       },
     };
   }

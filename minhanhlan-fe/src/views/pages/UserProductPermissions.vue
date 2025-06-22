@@ -1,4 +1,5 @@
 <script setup>
+import { masterDataService } from '@/service/MasterDataService';
 import { productFieldPermissionService } from '@/service/ProductFieldPermissionService';
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
@@ -15,7 +16,9 @@ const userIdToDelete = ref(null);
 
 const selectedUsers = ref([]);
 const selectedFields = ref([]);
+const selectedMenus = ref([]);
 const allUsers = ref([]);
+const allMenus = ref([]);
 const allFields = ref([
     { value: 'buildingCode', label: 'Mã tòa' },
     { value: 'apartmentCode', label: 'Mã căn' },
@@ -40,6 +43,7 @@ const allFields = ref([
     { value: 'contactInfo', label: 'Liên hệ' },
     { value: 'source', label: 'Báo nguồn' }
 ]);
+
 function getFieldLabel(field) {
     const found = allFields.value.find((f) => f.value === field);
     return found ? found.label : field;
@@ -57,6 +61,7 @@ const validateForm = () => {
 
 onMounted(() => {
     fetchPermissions();
+    fetchMenus();
     fetchUsers();
 });
 watch(
@@ -82,6 +87,18 @@ const fetchPermissions = async () => {
     }
 };
 
+const fetchMenus = async () => {
+    loading.value = true;
+    try {
+        const res = await masterDataService.getAllNoPaging();
+        allMenus.value = res.data;
+    } catch (err) {
+        toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được danh sách phân khu', life: 1000 });
+    } finally {
+        loading.value = false;
+    }
+};
+
 const fetchUsers = async () => {
     try {
         allUsers.value = await productFieldPermissionService.getUsers();
@@ -93,6 +110,7 @@ const fetchUsers = async () => {
 function openNew() {
     selectedUsers.value = [];
     selectedFields.value = [];
+    selectedMenus.value = [];
     submitted.value = false;
     permissionDialog.value = true;
 }
@@ -109,7 +127,8 @@ const savePermission = async () => {
     try {
         await productFieldPermissionService.createBulk({
             userIds: selectedUsers.value.map((u) => u.id),
-            fieldNames: selectedFields.value
+            fieldNames: selectedFields.value,
+            menuIds: selectedMenus.value
         });
         toast.add({ severity: 'success', summary: 'Lưu quyền thành thành công', detail: 'Phân quyền đã được thêm', life: 1000 });
         permissionDialog.value = false;
@@ -140,6 +159,7 @@ function onSort(event) {
 function editPermission(row) {
     selectedUsers.value = [row.user];
     selectedFields.value = [...row.fieldNames];
+    selectedMenus.value = [...(row.menuIds || [])];
     permissionDialog.value = true;
 }
 const confirmDeleteUserPermissions = (userId) => {
@@ -156,6 +176,12 @@ const removeByUser = async () => {
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xoá quyền', life: 1000 });
     }
 };
+
+function findSubDivision(menuIds) {
+    return allMenus.value.filter((t) => {
+        return menuIds?.includes(t.id);
+    });
+}
 </script>
 
 <template>
@@ -218,6 +244,13 @@ const removeByUser = async () => {
                         </div>
                     </template>
                 </Column>
+                <Column field="menuIds" header="Bảng hàng cấm" style="min-width: 13rem">
+                    <template #body="slotProps">
+                        <div class="flex flex-wrap gap-2" v-if="slotProps.data.menuIds">
+                            <Tag severity="warn" v-for="menu in findSubDivision(slotProps.data.menuIds)" :key="menu.id" :value="menu.name" class="mr-1" />
+                        </div>
+                    </template>
+                </Column>
                 <Column header="Hành động">
                     <template #body="slotProps">
                         <Button icon="pi pi-pencil" text rounded @click="editPermission(slotProps.data)" />
@@ -238,8 +271,13 @@ const removeByUser = async () => {
 
                     <div>
                         <label class="block font-bold mb-3">Cột không được xem</label>
-                        <MultiSelect class="w-full" :invalid="!!errors.selectedFields" v-model="selectedFields" :options="allFields" optionLabel="label" optionValue="value" placeholder="Chọn field" display="chip" />
+                        <MultiSelect class="w-full" :invalid="!!errors.selectedFields" v-model="selectedFields" :options="allFields" optionLabel="label" optionValue="value" placeholder="Chọn cột" display="chip" />
                         <small v-if="errors.selectedFields" class="text-red-500">{{ errors.selectedFields }}</small>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold mb-3">Bảng hàng cấm</label>
+                        <MultiSelect class="w-full" v-model="selectedMenus" :options="allMenus" optionLabel="name" optionValue="id" placeholder="Chọn bảng hàng" display="chip" />
                     </div>
                 </div>
             </form>

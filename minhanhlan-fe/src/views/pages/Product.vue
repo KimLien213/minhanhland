@@ -10,7 +10,7 @@ import { useMenuStore } from '@/stores/menuStore';
 import { FilterMatchMode } from '@primevue/core/api';
 import { useToast } from 'primevue/usetoast';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 const menuStore = useMenuStore();
 const socketCleanups = ref([]);
@@ -21,6 +21,7 @@ const deleteProductDialog = ref(false);
 const deleteProductsDialog = ref(false);
 const product = ref({});
 const route = useRoute();
+const router = useRouter();
 const submitted = ref(false);
 const directions = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Bắc', 'Đông Nam', 'Tây Bắc', 'Tây Nam'];
 const fileRef = ref();
@@ -690,10 +691,13 @@ onMounted(async () => {
         subdivision.value = route.params.subdivision;
         lazyParams.value.apartmentType = apartmentType.value;
         lazyParams.value.subdivision = subdivision.value;
-
-        await loadSortPreferences();
         // Load permissions và filter options trước
         await Promise.all([getMe(), fetchFilterOptions()]);
+        if (menuIds.value.length > 0 && menuIds.value.includes(route.params.subdivision)) {
+            await router.push({ name: 'login' });
+        }
+
+        await loadSortPreferences();
 
         // Sau đó mới load data (chỉ page đầu)
         await fetchInitialData();
@@ -990,10 +994,12 @@ const formatPhoneNumber = (phone) => {
 
 // permission
 const userPermissions = ref([]);
+const menuIds = ref([]);
 const getMe = async () => {
     try {
         const res = await authService.getMe();
         userPermissions.value = res.data?.permissions?.fieldNames || [];
+        menuIds.value = res.data?.permissions?.menuIds || [];
         columns.value = columnDefaults.value.filter((col) => !userPermissions.value.includes(col.key));
     } catch (err) {
         console.error('Error getting user permissions:', err);

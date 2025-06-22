@@ -5,27 +5,37 @@ import { MasterDataEntity } from '../entities/master-data.entity';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { paginate } from 'src/common/pagination/pagination.helper';
 import { MasterDataType } from 'src/common/enums';
+import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
 
 @Injectable()
 export class MasterDataRepository {
   constructor(
     @InjectRepository(MasterDataEntity)
     private readonly repo: Repository<MasterDataEntity>,
+    @InjectRepository(ProductFieldPermission)
+    private readonly permissions: Repository<ProductFieldPermission>,
   ) { }
-  async findAllNoPaging(type: MasterDataType) {
+  async findAllNoPaging(type: MasterDataType, userId: string) {
+    const permission = await this.permissions.createQueryBuilder('permission').where('permission.user_id = :userId', { userId }).getOne();
+    let menuIds = [];
+    if (permission && permission.menuIds) {
+      menuIds = permission.menuIds;
+    }
     // Sử dụng query builder để join và sort một lần
-    const result = await this.repo
+    const query = this.repo
       .createQueryBuilder('parent')
       .leftJoinAndSelect('parent.children', 'children')
       .where('parent.type = :type', { type })
       .andWhere('parent.parentId IS NULL')
-      .orderBy('parent.order', 'ASC')
+    if (menuIds && menuIds.length > 0) {
+      query.andWhere('parent.id NOT IN (:...menuIds)', { menuIds });
+    }
+
+    query.orderBy('parent.order', 'ASC')
       .addOrderBy('parent.name', 'ASC')
       .addOrderBy('children.order', 'ASC')
-      .addOrderBy('children.name', 'ASC')
-      .getMany();
-
-    return result;
+      .addOrderBy('children.name', 'ASC');
+    return query.getMany();
   }
   async findAll(dto: PaginationDto) {
     // Query chính cho parents với pagination

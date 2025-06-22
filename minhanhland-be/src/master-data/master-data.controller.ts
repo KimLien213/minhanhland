@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { MasterDataService } from './master-data.service';
@@ -30,8 +31,9 @@ export class MasterDataController {
   }
 
   @Get('all')
-  findAllNoPaging() {
-    return this.masterDataService.findAllNoPaging(MasterDataType.TOA_NHA);
+  findAllNoPaging(@Req() req) {
+    const userId = req.user.userId;
+    return this.masterDataService.findAllNoPaging(MasterDataType.TOA_NHA, userId);
   }
 
   @Post()

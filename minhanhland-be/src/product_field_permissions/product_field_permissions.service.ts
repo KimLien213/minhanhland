@@ -58,6 +58,7 @@ export class ProductFieldPermissionService {
         user: { id: userId },
         fieldNames: dto.fieldNames,
         productIds: dto.productIds,
+        menuIds: dto.menuIds,
       }),
     );
 

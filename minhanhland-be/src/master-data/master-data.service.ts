@@ -15,8 +15,8 @@ export class MasterDataService {
     return this.masterDataRepository.findAll(dto);
   }
 
-  async findAllNoPaging(type: MasterDataType) {
-    return this.masterDataRepository.findAllNoPaging(type);
+  async findAllNoPaging(type: MasterDataType, userId: string) {
+    return this.masterDataRepository.findAllNoPaging(type, userId);
   }
   async create(data: CreateMasterDataDto): Promise<MasterDataResponseDto> {
     const entity = await this.masterDataRepository.createMasterData({
