@@ -926,11 +926,11 @@ const getMe = async () => {
 };
 
 const columnDefaults = ref([
-    { key: 'buildingCode', label: 'Mã tòa', frozen: true, mobileFrozen: false, width: 7, mobileWidth: 6, filterable: true, maxWidth: 8 },
+    // { key: 'buildingCode', label: 'Mã tòa', frozen: true, mobileFrozen: false, width: 7, mobileWidth: 6, filterable: true, maxWidth: 8 },
     { key: 'apartmentCode', label: 'Mã căn', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4, maxWidth: 8 },
     { key: 'apartmentEncode', label: 'Mã căn x', frozen: true, mobileFrozen: true, width: 5, mobileWidth: 4 },
     { key: 'area', label: 'S', type: 's', width: 5, mobileWidth: 4, filterable: true, maxWidth: 6.5 },
-    { key: 'sellingPrice', label: 'Giá bán', width: 5, maxWidth: 6.5 },
+    { key: 'sellingPrice', label: 'Giá bán', width: 6, maxWidth: 6.5 },
     { key: 'tax', label: 'Thuế phí', type: 'money', width: 6, maxWidth: 6 },
     { key: 'furnitureNote', label: 'Nội thất', width: 7.5, filterable: true, maxWidth: 8 },
     { key: 'mortgageInfo', label: 'TT Sổ đỏ + Vay', width: 11, filterable: true, maxWidth: 15 },

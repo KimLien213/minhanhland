@@ -80,3 +80,127 @@
         }
     }
 }
+
+/* Prevent iOS Safari zoom on input focus */
+@media screen and (max-width: 768px) {
+  // General input elements
+  input[type="text"],
+  input[type="email"], 
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  textarea,
+  select {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  // PrimeVue specific components
+  .p-inputtext {
+    font-size: 16px !important;
+    
+    &:focus {
+      font-size: 16px !important;
+    }
+  }
+  
+  .p-password {
+    .p-inputtext {
+      font-size: 16px !important;
+      
+      &:focus {
+        font-size: 16px !important;
+      }
+    }
+  }
+  
+  .p-dropdown {
+    .p-dropdown-label {
+      font-size: 16px !important;
+    }
+    
+    .p-dropdown-items {
+      .p-dropdown-item {
+        font-size: 16px !important;
+      }
+    }
+  }
+  
+  .p-multiselect {
+    .p-multiselect-label {
+      font-size: 16px !important;
+    }
+  }
+  
+  .p-textarea {
+    font-size: 16px !important;
+    
+    &:focus {
+      font-size: 16px !important;
+    }
+  }
+  
+  .p-inputnumber {
+    .p-inputnumber-input {
+      font-size: 16px !important;
+      
+      &:focus {
+        font-size: 16px !important;
+      }
+    }
+  }
+  
+  .p-calendar {
+    .p-inputtext {
+      font-size: 16px !important;
+      
+      &:focus {
+        font-size: 16px !important;
+      }
+    }
+  }
+  
+  // For DataTable filters
+  .p-datatable {
+    .p-column-filter {
+      .p-inputtext {
+        font-size: 16px !important;
+      }
+      
+      .p-multiselect-label {
+        font-size: 16px !important;
+      }
+    }
+  }
+  
+  // Toast messages
+  .p-toast {
+    font-size: 14px; // Toast can be smaller since it's not an input
+  }
+}
+
+// Optional: Utility class for specific cases
+.no-zoom-input {
+  @media screen and (max-width: 768px) {
+    font-size: 16px !important;
+    
+    &:focus {
+      font-size: 16px !important;
+    }
+  }
+}
+
+// For forms that need special handling
+.mobile-form {
+  @media screen and (max-width: 768px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+      line-height: 1.4;
+    }
+  }
+}
