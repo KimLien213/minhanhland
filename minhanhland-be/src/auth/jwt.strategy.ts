@@ -46,13 +46,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   private getClientIp(req: any): string {
-    return (
-      req.headers['x-forwarded-for'] as string ||
-      req.headers['x-real-ip'] as string ||
-      req.connection?.remoteAddress ||
-      req.socket?.remoteAddress ||
-      req.ip ||
-      '127.0.0.1'
-    ).split(',')[0].trim();
-  }
+  return (
+    req.connection?.remoteAddress ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    '127.0.0.1'
+  ).split(',')[0].trim();
+}
 }

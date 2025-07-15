@@ -70,16 +70,12 @@ export class AuthController {
     return { message: 'Đăng xuất thành công' };
   }
   
-  private getClientIp(req: Request): string {
-    return (
-      (req.headers['x-forwarded-for'] as string) ||
-      (req.headers['x-real-ip'] as string) ||
-      req.connection.remoteAddress ||
-      req.socket.remoteAddress ||
-      req.ip ||
-      '127.0.0.1'
-    )
-      .split(',')[0]
-      .trim();
-  }
+  private getClientIp(req: any): string {
+  return (
+    req.connection?.remoteAddress ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    '127.0.0.1'
+  ).split(',')[0].trim();
+}
 }
