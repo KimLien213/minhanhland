@@ -6,6 +6,7 @@ import { MasterDataResponseDto } from './dto/master-data-response.dto';
 import { MasterDataRepository } from './repositories/master-data.repository';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { MasterDataType } from 'src/common/enums';
+import { ReorderMasterDataDto } from './dto/reorder-master-data.dto';
 
 interface OrderUpdateDto {
   id: string;
@@ -20,8 +21,8 @@ export class MasterDataService {
     return this.masterDataRepository.findAll(dto);
   }
 
-  async findAllNoPaging(type: MasterDataType) {
-    return this.masterDataRepository.findAllNoPaging(type);
+  async findAllNoPaging(type: MasterDataType, userId: string) {
+    return this.masterDataRepository.findAllNoPaging(type, userId);
   }
 
   async create(data: CreateMasterDataDto): Promise<MasterDataResponseDto> {
@@ -54,6 +55,14 @@ export class MasterDataService {
     }
   }
 
+async reorder(data: ReorderMasterDataDto): Promise<{ success: boolean }> {
+  try {
+    await this.masterDataRepository.updateOrder(data.items);
+    return { success: true };
+  } catch (error) {
+    throw new ConflictException('Không thể cập nhật thứ tự');
+  }
+}
   async update(
     id: string,
     data: UpdateMasterDataDto,

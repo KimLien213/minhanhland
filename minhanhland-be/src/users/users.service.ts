@@ -84,20 +84,41 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<UserEntity> {
     const user = await this.findById(id);
 
+    // Check username uniqueness (only if changing)
     if (dto.username && dto.username !== user.username) {
       const exists = await this.findByUsername(dto.username);
       if (exists) throw new BadRequestException('Username already exists');
     }
 
+    // Check email uniqueness (only if changing)
     if (dto.email && dto.email !== user.email) {
       const exists = await this.findByEmail(dto.email);
       if (exists) throw new BadRequestException('Email already exists');
     }
 
-    Object.assign(user, dto);
-    let userDepartment = new DepartmentEntity();
-    userDepartment.id = dto.departmentId;
-    user.department = userDepartment;
+    // Prepare update data
+    const updateData: Partial<UserEntity> = { ...dto };
+
+    // Handle password update
+    if (dto.password && dto.password.trim() !== '') {
+      // User wants to change password
+      const hashedPassword = await bcrypt.hash(dto.password, 10);
+      updateData.password = hashedPassword;
+    } else {
+      // Keep current password - remove password from update data
+      delete updateData.password;
+    }
+
+    // Handle department update
+    if (dto.departmentId) {
+      const userDepartment = new DepartmentEntity();
+      userDepartment.id = dto.departmentId;
+      updateData.department = userDepartment;
+    }
+
+    // Apply updates to user entity
+    Object.assign(user, updateData);
+
     return this.userRepo.save(user);
   }
 

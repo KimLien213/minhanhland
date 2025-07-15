@@ -31,7 +31,7 @@ import { UserEntity } from 'src/users/entities/user.entity';
           ProductFieldPermission,
           UserSortPreference
         ],
-        synchronize: true,
+        synchronize: true, // Set to false in production
       }),
     }),
   ],

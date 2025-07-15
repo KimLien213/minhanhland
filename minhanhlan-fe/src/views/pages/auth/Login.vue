@@ -30,14 +30,13 @@ const handleLogin = async () => {
 
     try {
         await authService.login(username.value, password.value);
-        debugger;
         if (authService.isAdmin()) {
             router.push(menuStore.defaultProductRoute || '/employee');
         } else {
             router.push(menuStore.defaultProductRoute || '/unauthorized');
         }
     } catch (err) {
-        errorMsg.value = 'Tài khoản hoặc mật khẩu không đúng';
+        errorMsg.value = err.response?.data?.message || 'Tài khoản hoặc mật khẩu không đúng';
     } finally {
         loading.value = false;
     }

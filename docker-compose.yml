@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  minhanh_api:
+    container_name: minhanh_api_container
+    build: ./minhanhland-be
+    ports:
+      - "3002:3000"
+    networks:
+      - minhanhland-network
+
+  minhanh_fe:
+    image: minhanh_fe
+    build:
+      context: ./minhanhlan-fe
+    container_name: minhanhland
+    ports:
+      - 3082:3000
+
+networks:
+  minhanhland-network:
+    driver: bridge

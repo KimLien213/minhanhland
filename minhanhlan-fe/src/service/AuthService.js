@@ -34,8 +34,16 @@ export const authService = {
         return token;
     },
 
-    logout() {
-        localStorage.removeItem('access_token');
+    async logout() {
+        try {
+            // Gọi API logout để xóa IP khỏi database
+            await axiosInstance.post('/auth/logout');
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            // Luôn xóa token khỏi localStorage
+            localStorage.removeItem('access_token');
+        }
     },
 
     getMe() {

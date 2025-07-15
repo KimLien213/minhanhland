@@ -1,3 +1,4 @@
+// products.service.ts - Thêm method updateProductOrder
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -5,6 +6,7 @@ import { Product } from './entities/product.entity';
 import { ProductImage } from './entities/product-image.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductOrderDto } from './dto/update-product-order.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,6 +14,7 @@ import { MasterDataEntity } from 'src/master-data/entities/master-data.entity';
 import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
 import { UserSortPreferencesService } from 'src/user-sort-preference/user-sort-preference.service';
 import { ProductGateway } from './product.gateway';
+import { log } from 'console';
 
 @Injectable()
 export class ProductService {
@@ -27,7 +30,37 @@ export class ProductService {
     private readonly userSortPreferencesService: UserSortPreferencesService,
     private readonly productGateway: ProductGateway,
   ) { }
-  // Sửa trong ProductService - chỉ các phần create, update, remove
+
+  // NEW: Update product order method
+  async updateProductOrder(dto: UpdateProductOrderDto) {
+    try {
+      console.log('🔄 Updating product order:', dto);
+
+      // Start transaction
+      await this.productRepo.manager.transaction(async (manager) => {
+        // Update each product's sort order
+        for (const orderItem of dto.orderUpdates) {
+          await manager.update(Product, 
+            { id: orderItem.id }, 
+            { sortOrder: orderItem.order }
+          );
+        }
+      });
+
+      console.log('✅ Product order updated successfully');
+      
+      return { 
+        success: true, 
+        message: 'Product order updated successfully',
+        updatedCount: dto.orderUpdates.length
+      };
+
+    } catch (error) {
+      console.error('❌ Error updating product order:', error);
+      throw new Error('Failed to update product order');
+    }
+  }
+
   async create(dto: CreateProductDto, files: Express.Multer.File[]) {
     const apartmentTypeEntity = await this.masterDataRepo.findOne({
       where: { id: dto.apartmentType },
@@ -36,10 +69,21 @@ export class ProductService {
       where: { id: dto.subdivision },
     });
 
+    // Get the highest sort order for this apartment type and subdivision
+    const maxSortOrder = await this.productRepo
+      .createQueryBuilder('product')
+      .select('MAX(product.sortOrder)', 'maxOrder')
+      .where('product.apartmentType.id = :apartmentType', { apartmentType: dto.apartmentType })
+      .andWhere('product.subdivision.id = :subdivision', { subdivision: dto.subdivision })
+      .getRawOne();
+
+    const nextSortOrder = (maxSortOrder?.maxOrder || 0) + 1;
+
     const product = this.productRepo.create({
       ...dto,
       apartmentType: apartmentTypeEntity,
       subdivision: subdivisionEntity,
+      sortOrder: nextSortOrder, // Set initial sort order
     });
 
     if (files?.length) {
@@ -89,9 +133,11 @@ export class ProductService {
     // Store original subdivision and apartmentType IDs for notification
     const originalSubdivision = product.subdivision.id;
     const originalApartmentType = product.apartmentType.id;
+    const order = product.sortOrder;
 
     Object.assign(product, dto);
     product.imageList = [];
+    product.sortOrder = order;
 
     if (dto.imageIds?.length) {
       const images = await this.imageRepo.find({
@@ -212,7 +258,7 @@ export class ProductService {
 
     if (query.search) {
       builder.andWhere(
-        '(product.apartmentCode LIKE :search OR product.buildingCode LIKE :search OR product.contactInfo LIKE :search)',
+        '(product.apartmentCode LIKE :search OR product.apartmentEncode LIKE :search OR product.contactInfo LIKE :search)',
         { search: `%${query.search}%` },
       );
     }
@@ -241,8 +287,9 @@ export class ProductService {
       // Use saved preference
       builder.orderBy(`product.${sortPreference.sortBy}`, sortPreference.sortOrder);
     } else {
-      // Default sorting
-      builder.orderBy('product.createdAt', 'DESC');
+      // Default sorting by sortOrder first, then by createdAt
+      builder.orderBy('product.sortOrder', 'ASC')
+             .addOrderBy('product.createdAt', 'DESC');
     }
 
     const page = Number(query.page) || 1;
@@ -259,8 +306,8 @@ export class ProductService {
       sortBy: sortPreference.sortBy,
       sortOrder: sortPreference.sortOrder,
     } : {
-      sortBy: 'createdAt',
-      sortOrder: 'DESC' as const,
+      sortBy: 'sortOrder',
+      sortOrder: 'ASC' as const,
     };
 
     return {
@@ -271,6 +318,7 @@ export class ProductService {
       currentSort,
     };
   }
+
   async getFilterOptions(query: ProductQueryDto, userId: string) {
     const fields = [
       'buildingCode',

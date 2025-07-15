@@ -34,11 +34,13 @@ const seniorityOptions = [
     { label: '5 năm', value: '5_NAM' },
     { label: 'Trên 5 năm', value: 'TREN_5_NAM' }
 ];
+
 const selectedFile = ref(null);
 
 function getRoleLabel(value) {
     return roleOptions.find((r) => r.value === value)?.label || value;
 }
+
 async function fetchDepartments() {
     const res = await departmentService.getAllNoPaging();
     departments.value = res.data;
@@ -47,9 +49,11 @@ async function fetchDepartments() {
 function getSeniorityLabel(value) {
     return seniorityOptions.find((s) => s.value === value)?.label || value;
 }
+
 const filters = ref({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS }
 });
+
 const submitted = ref(false);
 
 watch(
@@ -60,6 +64,7 @@ watch(
         fetchUsers();
     }
 );
+
 const lazyParams = ref({
     page: 1,
     limit: 10,
@@ -67,8 +72,10 @@ const lazyParams = ref({
     sortOrder: 'ASC',
     search: ''
 });
+
 const loading = ref(false);
 const totalRecords = ref(0);
+
 function onPage(event) {
     lazyParams.value.page = event.page + 1;
     lazyParams.value.limit = event.rows;
@@ -80,6 +87,7 @@ function onSort(event) {
     lazyParams.value.sortOrder = event.sortOrder === 1 ? 'ASC' : 'DESC';
     fetchUsers();
 }
+
 const fetchUsers = async () => {
     try {
         const res = await userService.getAll(lazyParams.value);
@@ -107,15 +115,38 @@ function hideDialog() {
 
 const saveUser = async () => {
     submitted.value = true;
-    if (!user.value.fullName || !user.value.username || !user.value.password || !user.value.role) return;
-    if (user.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) return;
+
+    // Validation for new user
+    if (!user.value.id) {
+        if (!user.value.fullName || !user.value.username || !user.value.password || !user.value.role) {
+            return;
+        }
+    } else {
+        // Validation for existing user (password is optional)
+        if (!user.value.fullName || !user.value.username || !user.value.role) {
+            return;
+        }
+    }
+
+    if (user.value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.value.email)) {
+        return;
+    }
 
     try {
         const formData = new FormData();
-        formData.append('file', selectedFile.value);
+
+        if (selectedFile.value) {
+            formData.append('file', selectedFile.value);
+        }
+
         formData.append('fullName', user.value.fullName);
         formData.append('username', user.value.username);
-        formData.append('password', user.value.password);
+
+        // Only append password if it's provided (for new users, always required; for updates, optional)
+        if (user.value.password && user.value.password.trim() !== '') {
+            formData.append('password', user.value.password);
+        }
+
         if (user.value.departmentId) {
             formData.append('departmentId', user.value.departmentId);
         }
@@ -129,24 +160,38 @@ const saveUser = async () => {
             formData.append('note', user.value.note);
         }
         formData.append('role', user.value.role);
+
         if (user.value.id) {
             await userService.update(user.value.id, formData);
-            toast.add({ severity: 'success', summary: 'Cập nhật thành công', detail: user.value.fullName });
+            toast.add({
+                severity: 'success',
+                summary: 'Cập nhật thành công',
+                detail: user.value.fullName
+            });
         } else {
             await userService.create(formData);
-            toast.add({ severity: 'success', summary: 'Tạo thành công', detail: user.value.fullName });
+            toast.add({
+                severity: 'success',
+                summary: 'Tạo thành công',
+                detail: user.value.fullName
+            });
         }
 
         userDialog.value = false;
         fetchUsers();
     } catch (err) {
-        toast.add({ severity: 'error', summary: 'Lỗi', detail: err.response?.data?.message || 'Lưu thất bại' });
+        toast.add({
+            severity: 'error',
+            summary: 'Lỗi',
+            detail: err.response?.data?.message || 'Lưu thất bại'
+        });
     }
 };
 
 function editUser(row) {
     user.value = { ...row };
     user.value.departmentId = row.department?.id;
+    user.value.password = ''; // Clear password field for security
     avatarUrl.value = getImageUrl(user.value.avatarUrl);
     userDialog.value = true;
 }
@@ -182,7 +227,9 @@ async function deleteSelectedUsers() {
         toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không thể xoá các nhân viên' });
     }
 }
+
 const avatarUrl = ref(null);
+
 const onAvatarFileChange = (event) => {
     const file = event.target?.files?.[0];
     if (file) {
@@ -200,6 +247,7 @@ const getImageUrl = (url) => {
     return import.meta.env.VITE_API_URL + url;
 };
 </script>
+
 <template>
     <div>
         <div class="card">
@@ -259,7 +307,7 @@ const getImageUrl = (url) => {
                         </div>
                     </template>
                 </Column>
-                <Column field="department.name" header="Phòng ban" sortable style="min-width: 10rem" />
+                <Column field="department.name" header="Phòng ban" style="min-width: 10rem" />
                 <Column field="username" header="Tài khoản" sortable style="min-width: 10rem" />
                 <Column field="role" header="Loại người dùng">
                     <template #body="slotProps">
@@ -289,17 +337,19 @@ const getImageUrl = (url) => {
                 <div class="bg-white rounded-xl px-6 py-4 relative border border-gray-300">
                     <div class="flex justify-between items-start">
                         <span class="font-bold uppercase text-sm text-gray-700">Ảnh đại diện</span>
-                        <label for="avatarInput" class="flex items-center gap-1 cursor-pointer text-primary hover:underline text-sm"> <i class="pi pi-pencil text-xs"></i>Sửa</label>
+                        <label for="avatarInput" class="flex items-center gap-1 cursor-pointer text-primary hover:underline text-sm"> <i class="pi pi-pencil text-xs"></i>Sửa </label>
                         <input id="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarFileChange" />
                     </div>
                     <div class="flex justify-center mt-4">
                         <img :src="avatarUrl || '/images/avatar-default.svg'" alt="avatar" class="w-32 h-32 object-cover rounded-full border-2 border-gray-300 shadow-sm" />
                     </div>
                 </div>
+
                 <div>
                     <label class="font-bold block mb-1">Phòng ban</label>
                     <Select v-model="user.departmentId" :options="departments" optionLabel="name" optionValue="id" class="w-full" />
                 </div>
+
                 <div>
                     <label class="font-bold block mb-1">Họ và tên<span class="text-red-500">*</span></label>
                     <InputText v-model="user.fullName" class="w-full" :invalid="submitted && !user.fullName" />
@@ -312,10 +362,15 @@ const getImageUrl = (url) => {
                     <small v-if="submitted && !user.username" class="text-red-500">Vui lòng nhập tài khoản.</small>
                 </div>
 
-                <div v-if="!user.id">
-                    <label class="font-bold block mb-1">Mật khẩu<span class="text-red-500">*</span></label>
-                    <Password v-model="user.password" toggleMask class="w-full" fluid :feedback="false" :invalid="submitted && !user.password" />
-                    <small v-if="submitted && !user.password" class="text-red-500">Vui lòng nhập mật khẩu.</small>
+                <div>
+                    <label class="font-bold block mb-1">
+                        Mật khẩu
+                        <span v-if="!user.id" class="text-red-500">*</span>
+                        <span v-else class="text-gray-500 text-sm">(để trống nếu không đổi)</span>
+                    </label>
+                    <Password v-model="user.password" toggleMask class="w-full" fluid :feedback="false" :invalid="submitted && !user.id && !user.password" />
+                    <small v-if="submitted && !user.id && !user.password" class="text-red-500"> Vui lòng nhập mật khẩu. </small>
+                    <small v-if="user.id" class="text-gray-500"> Để trống nếu không muốn đổi mật khẩu </small>
                 </div>
 
                 <div>
@@ -351,10 +406,10 @@ const getImageUrl = (url) => {
         <Dialog v-model:visible="deleteUserDialog" class="w-[90vw] sm:w-[350px] md:w-[450px]" header="Xác nhận" :modal="true">
             <div class="flex items-center gap-4">
                 <i class="pi pi-exclamation-triangle text-3xl" />
-                <span v-if="user"
-                    >Bạn có chắc chắn muốn xoá <b>{{ user.fullName }}</b
-                    >?</span
-                >
+                <span v-if="user">
+                    Bạn có chắc chắn muốn xoá <b>{{ user.fullName }}</b
+                    >?
+                </span>
             </div>
             <template #footer>
                 <Button label="Không" icon="pi pi-times" text @click="deleteUserDialog = false" />

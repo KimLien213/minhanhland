@@ -1,20 +1,58 @@
-// src/auth/jwt.strategy.ts
-import { Injectable } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PassportStrategy } from '@nestjs/passport';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { UserEntity } from 'src/users/entities/user.entity';
+import { Repository } from 'typeorm';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    @InjectRepository(UserEntity)
+    private readonly userRepo: Repository<UserEntity>,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get('JWT_SECRET'),
+      secretOrKey: configService.get<string>('JWT_SECRET'),
+      passReqToCallback: true, // Cho phép truy cập request object
     });
   }
 
-  async validate(payload: any) {
-    return { userId: payload.sub, email: payload.email };
+  async validate(req: any, payload: any) {
+    const user = await this.userRepo.findOne({
+      where: { id: payload.sub }
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Lấy IP hiện tại từ request
+    const currentIp = this.getClientIp(req);
+    
+    // Nếu lastLoginIp chưa được set hoặc IP khác với IP đã lưu
+    if (!user.lastLoginIp || user.lastLoginIp !== currentIp) {
+      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.');
+    }
+
+    return { 
+      userId: payload.sub, 
+      username: payload.username, 
+      role: payload.role 
+    };
+  }
+
+  private getClientIp(req: any): string {
+    return (
+      req.headers['x-forwarded-for'] as string ||
+      req.headers['x-real-ip'] as string ||
+      req.connection?.remoteAddress ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      '127.0.0.1'
+    ).split(',')[0].trim();
   }
 }

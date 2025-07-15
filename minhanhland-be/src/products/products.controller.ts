@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   Req,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import { ProductService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -20,6 +21,7 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { UpdateProductOrderDto } from './dto/update-product-order.dto';
 
 @Controller('products')
 @UseGuards(AuthGuard('jwt'))
@@ -27,7 +29,7 @@ export class ProductController {
   constructor(private readonly productService: ProductService) { }
 
   @Post()
-  @UseInterceptors(FilesInterceptor('images', 10, {
+  @UseInterceptors(FilesInterceptor('images', 30, {
     storage: diskStorage({
       destination: './uploads/products',
       filename: (req, file, cb) => {
@@ -41,7 +43,7 @@ export class ProductController {
   }
 
   @Put(':id')
-  @UseInterceptors(FilesInterceptor('images', 10, {
+  @UseInterceptors(FilesInterceptor('images', 30, {
     storage: diskStorage({
       destination: './uploads/products',
       filename: (req, file, cb) => {
@@ -56,6 +58,12 @@ export class ProductController {
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     return this.productService.update(id, dto, files);
+  }
+
+  // NEW: Update product order endpoint
+  @Patch('update-order')
+  async updateProductOrder(@Body() dto: UpdateProductOrderDto) {
+    return this.productService.updateProductOrder(dto);
   }
 
   @Delete(':id')

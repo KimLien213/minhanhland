@@ -12,6 +12,7 @@ import { MasterDataModule } from './master-data/master-data.module';
 import { ProductFieldPermissionsModule } from './product_field_permissions/product_field_permissions.module';
 import { ImportExcelModule } from './import-excel/import-excel.module';
 import { UserSortPreferencesModule } from './user-sort-preference/user-sort-preference.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { UserSortPreferencesModule } from './user-sort-preference/user-sort-pref
     MasterDataModule,
     ProductFieldPermissionsModule,
     ImportExcelModule,
-    UserSortPreferencesModule
+    UserSortPreferencesModule,
+    JobsModule
   ],
   controllers: [AppController],
   providers: [AppService],
