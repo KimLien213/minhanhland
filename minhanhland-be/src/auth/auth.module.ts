@@ -8,10 +8,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductFieldPermission } from 'src/product_field_permissions/entities/product_field_permission.entity';
+import { UserEntity } from 'src/users/entities/user.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ProductFieldPermission]),
+    TypeOrmModule.forFeature([ProductFieldPermission, UserEntity]),
     UsersModule,
     PassportModule,
     JwtModule.registerAsync({

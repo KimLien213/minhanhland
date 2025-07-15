@@ -1,55 +1,55 @@
 import router from '@/router';
 import { authService } from '@/service/AuthService';
-import { useLoadingStore } from '@/stores/loadingStore';
 import axios from 'axios';
-import { showToast } from './toast';
 
-const { startLoading, stopLoading } = useLoadingStore();
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    baseURL: API_URL,
 });
 
-axiosInstance.interceptors.request.use((config) => {
-    if (!config.silent) {
-        startLoading();
-    }
-
-    const token = authService.getToken();
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-});
-
-axiosInstance.interceptors.response.use(
-    (res) => {
-        if (!res.config.silent) {
-            stopLoading();
+// Request interceptor
+axiosInstance.interceptors.request.use(
+    (config) => {
+        const token = authService.getToken();
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
         }
-        return res;
+        return config;
     },
-    (err) => {
-        if (!err.config?.silent) {
-            stopLoading();
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
+// Response interceptor
+axiosInstance.interceptors.response.use(
+    (response) => {
+        return response;
+    },
+    async (error) => {
+        if (error.response?.status === 401) {
+            const errorMessage = error.response?.data?.message;
+
+            // Kiểm tra nếu là lỗi phiên đăng nhập không hợp lệ
+            if (errorMessage?.includes('Phiên đăng nhập không hợp lệ') ||
+                errorMessage?.includes('đăng nhập lại') ||
+                !authService.getToken()) {
+
+                // Xóa token và chuyển về trang login
+                localStorage.removeItem('access_token');
+
+                // Hiển thị thông báo
+                if (window.showToast) {
+                    window.showToast('error', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+                }
+
+                // Chuyển về trang login
+                router.push('/auth/login');
+            }
         }
 
-        const status = err.response?.status;
-        const message = err.response?.data?.message || 'Lỗi không xác định';
-
-        if (status === 401) {
-            authService.logout();
-            router.push({ name: 'login' });
-        } else {
-            showToast({
-                severity: 'error',
-                summary: `Lỗi ${status || ''}`,
-                detail: Array.isArray(message) ? message.join(', ') : message,
-                life: 4000
-            });
-        }
-
-        return Promise.reject(err);
+        return Promise.reject(error);
     }
 );
 

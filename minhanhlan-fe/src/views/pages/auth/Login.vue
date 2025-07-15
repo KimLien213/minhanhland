@@ -36,7 +36,7 @@ const handleLogin = async () => {
             router.push(menuStore.defaultProductRoute || '/unauthorized');
         }
     } catch (err) {
-        errorMsg.value = 'Tài khoản hoặc mật khẩu không đúng';
+        errorMsg.value = err.response?.data?.message || 'Tài khoản hoặc mật khẩu không đúng';
     } finally {
         loading.value = false;
     }

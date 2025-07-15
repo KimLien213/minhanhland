@@ -33,6 +33,9 @@ export class UserEntity extends BaseEntity {
   @Column({ name: 'avatar_url', nullable: true })
   avatarUrl?: string;
 
+  @Column({ name: 'last_login_ip', nullable: true })
+  lastLoginIp?: string;
+
   @OneToMany(() => ProductFieldPermission, (permission) => permission.user)
   fieldPermissions: ProductFieldPermission[];
 }

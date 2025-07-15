@@ -44,28 +44,48 @@ async function handleRootRedirect() {
         return;
     }
 
-    // Đợi một chút cho các service khởi tạo
-    await nextTick();
+    // Kiểm tra tính hợp lệ của token bằng cách gọi API /me
+    try {
+        await authService.getMe();
+        
+        // Đợi một chút cho các service khởi tạo
+        await nextTick();
 
-    // Admin redirect
-    if (authService.isAdmin()) {
+        // Admin redirect
+        if (authService.isAdmin()) {
+            if (menuStore.defaultProductRoute) {
+                await router.replace(menuStore.defaultProductRoute);
+            } else {
+                await router.replace('/employee');
+            }
+            await nextTick();
+            window.dispatchEvent(new CustomEvent('route-changed'));
+            return;
+        }
+
+        // User thường - chờ menu data load nếu chưa có
         if (menuStore.defaultProductRoute) {
             await router.replace(menuStore.defaultProductRoute);
-        } else {
-            await router.replace('/employee');
+            await nextTick();
+            window.dispatchEvent(new CustomEvent('route-changed'));
         }
-        await nextTick();
-        window.dispatchEvent(new CustomEvent('route-changed'));
-        return;
+        // Nếu chưa có defaultProductRoute, để menu component tự xử lý
+        
+    } catch (error) {
+        // Nếu gọi API /me thất bại (401), token không hợp lệ
+        console.log('Token validation failed, redirecting to login');
+        authService.logout();
+        await router.replace('/auth/login');
+        
+        if (error.response?.data?.message?.includes('Phiên đăng nhập không hợp lệ')) {
+            toast.add({
+                severity: 'warn',
+                summary: 'Thông báo',
+                detail: 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.',
+                life: 5000
+            });
+        }
     }
-
-    // User thường - chờ menu data load nếu chưa có
-    if (menuStore.defaultProductRoute) {
-        await router.replace(menuStore.defaultProductRoute);
-        await nextTick();
-        window.dispatchEvent(new CustomEvent('route-changed'));
-    }
-    // Nếu chưa có defaultProductRoute, để menu component tự xử lý
 }
 </script>
 
