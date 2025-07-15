@@ -24,6 +24,16 @@ const route = useRoute();
 const router = useRouter();
 const submitted = ref(false);
 const directions = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Bắc', 'Đông Nam', 'Tây Bắc', 'Tây Nam'];
+const tt = [
+    'Có sổ k vay',
+    'Có sổ có vay',
+    'Chưa sổ có vay',
+    'Chưa sổ k vay',
+    'Đang làm sổ có vay',
+    'Đang làm sổ k vay',
+    'Tiến độ ',
+    'Tts 95%',
+];
 const fileRef = ref();
 const isMobile = ref(false);
 
@@ -257,6 +267,8 @@ const handleShowImages = (images) => {
 };
 
 const handleEditProduct = (data) => {
+    data.apartmentType = apartmentType.value;
+    data.subdivision = subdivision.value;
     editProduct(data);
 };
 
@@ -1322,7 +1334,7 @@ const getColumnStyle = computed(() => {
 
                 <div class="flex flex-col gap-y-2">
                     <label>TT sổ đỏ + Vay</label>
-                    <InputText v-model="form.mortgageInfo" class="w-full" />
+                    <Dropdown v-model="form.mortgageInfo" :options="tt" class="w-full" />
                 </div>
 
                 <div class="flex flex-col gap-y-2">
