@@ -11,23 +11,18 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto } from './dtos/login.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
-  async login(@Body() body: LoginDto, @Req() req: Request) {
-    // Lấy IP từ request
-    const clientIp = this.getClientIp(req);
-
+  async login(@Body() body: LoginDto) {
     const user = await this.authService.validateUser(
       body.username,
-      body.password,
-      clientIp,
+      body.password
     );
-    return this.authService.login(user, clientIp);
+    return this.authService.login(user);
   }
 
   @Get('me')
@@ -40,7 +35,6 @@ export class AuthController {
   @Post('force-logout/:userId')
   @UseGuards(AuthGuard('jwt'))
   async forceLogout(@Req() req, @Param('userId') userId: string) {
-    // Chỉ admin mới có thể force logout user khác
     if (req.user.role !== 'ADMIN') {
       throw new UnauthorizedException(
         'Chỉ admin mới có thể thực hiện thao tác này',
@@ -51,17 +45,6 @@ export class AuthController {
     return { message: 'Đã đăng xuất người dùng khỏi thiết bị' };
   }
 
-  @Get('active-sessions')
-  @UseGuards(AuthGuard('jwt'))
-  async getActiveSessions(@Req() req) {
-    if (req.user.role !== 'ADMIN') {
-      throw new UnauthorizedException('Chỉ admin mới có thể xem thông tin này');
-    }
-
-    return this.authService.getCurrentLoginDevices();
-  }
-
-  
   @Post('logout')
   @UseGuards(AuthGuard('jwt'))
   async logout(@Req() req) {
@@ -69,13 +52,4 @@ export class AuthController {
     await this.authService.logout(userId);
     return { message: 'Đăng xuất thành công' };
   }
-  
-  private getClientIp(req: any): string {
-  return (
-    req.connection?.remoteAddress ||
-    req.socket?.remoteAddress ||
-    req.ip ||
-    '127.0.0.1'
-  ).split(',')[0].trim();
-}
 }

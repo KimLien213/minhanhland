@@ -3,6 +3,7 @@ import FullscreenImageGallery from '@/components/galeria/FullscreenImageGallery.
 import MobilePasteFileUpload from '@/components/MobilePasteFileUpload.vue';
 import ProductDataTable from '@/components/ProductDataTable.vue';
 import { authService } from '@/service/AuthService';
+import { masterDataService } from '@/service/MasterDataService';
 import { productService } from '@/service/ProductService';
 import { socketService } from '@/service/SocketService';
 import { sortPreferencesService } from '@/service/SortPreferencesService';
@@ -16,6 +17,9 @@ const menuStore = useMenuStore();
 const socketCleanups = ref([]);
 const initialImages = ref([]);
 const pendingImages = ref([]);
+const divisions = ref([]);
+const selectedDivision = ref('');
+const changeDivisionModal = ref(false);
 const productDialog = ref(false);
 const deleteProductDialog = ref(false);
 const deleteProductsDialog = ref(false);
@@ -24,16 +28,7 @@ const route = useRoute();
 const router = useRouter();
 const submitted = ref(false);
 const directions = ['Đông', 'Tây', 'Nam', 'Bắc', 'Đông Bắc', 'Đông Nam', 'Tây Bắc', 'Tây Nam'];
-const tt = [
-    'Có sổ k vay',
-    'Có sổ có vay',
-    'Chưa sổ có vay',
-    'Chưa sổ k vay',
-    'Đang làm sổ có vay',
-    'Đang làm sổ k vay',
-    'Tiến độ ',
-    'Tts 95%',
-];
+const tt = ['Có sổ k vay', 'Có sổ có vay', 'Chưa sổ có vay', 'Chưa sổ k vay', 'Đang làm sổ có vay', 'Đang làm sổ k vay', 'Tiến độ ', 'Tts 95%'];
 const fileRef = ref();
 const isMobile = ref(false);
 
@@ -691,6 +686,44 @@ const filterOptions = ref({
     status: []
 });
 
+const fetchDivision = async () => {
+    try {
+        const res = await masterDataService.getAllNoPaging();
+        divisions.value = wrapList(res.data);
+    } catch (err) {
+        toast.add({ severity: 'error', summary: 'Lỗi', detail: 'Không tải được dữ liệu' });
+    }
+};
+
+/**
+ * Flatten cây thành mảng { id, label } cho mọi node KHÔNG phải root.
+ * label = "[path name nối bằng ' - ']"
+ * @param {Array|Object} data - Mảng node hoặc 1 node root
+ * @param {string} sep - Dấu nối giữa các cấp
+ * @returns {{id:string,label:string}[]}
+ */
+function wrapList(data, sep = ' - ') {
+    const roots = Array.isArray(data) ? data : [data];
+    const out = [];
+
+    function dfs(node, pathNames) {
+        const name = node?.name ?? '';
+        const nextPath = name ? [...pathNames, name] : pathNames;
+
+        // Với mọi children, tạo item + đi tiếp
+        const children = Array.isArray(node?.children) ? node.children : [];
+        for (const child of children) {
+            const childName = child?.name ?? '';
+            const label = `${[...nextPath, childName].join(sep)}`;
+            out.push({ id: child.id, label });
+            dfs(child, nextPath); // tiếp tục nếu có nhiều cấp
+        }
+    }
+
+    for (const root of roots) dfs(root, []);
+    return out;
+}
+
 onMounted(async () => {
     handleResize();
     initializeSocket();
@@ -709,6 +742,7 @@ onMounted(async () => {
             await router.push({ name: 'login' });
         }
 
+        await fetchDivision();
         await loadSortPreferences();
 
         // Sau đó mới load data (chỉ page đầu)
@@ -939,7 +973,7 @@ function confirmDeleteSelected() {
 
 async function deleteSelectedProducts() {
     try {
-        await Promise.all(selectedProducts.value.map((u) => productService.remove(u.id)));
+        await productService.removeAll({ productIds: selectedProducts.value.map((u) => u.id) });
         toast.add({ severity: 'success', summary: 'Đã xoá', detail: 'Đã xoá các căn hộ được chọn', life: 3000 });
         resetData();
         deleteProductsDialog.value = false;
@@ -991,18 +1025,6 @@ function getStatusColor(status) {
             };
     }
 }
-
-// Tối ưu format phone number với memoization
-const formatPhoneNumber = (phone) => {
-    if (!phone) return '';
-    const cleaned = String(phone).replace(/\D/g, '');
-    if (cleaned.length === 10) {
-        return cleaned.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
-    } else if (cleaned.length === 11 && cleaned.startsWith('84')) {
-        return '+' + cleaned.replace(/(\d{2})(\d{3})(\d{4})(\d{2})/, '$1 $2 $3 $4');
-    }
-    return phone;
-};
 
 // permission
 const userPermissions = ref([]);
@@ -1251,6 +1273,41 @@ const getColumnStyle = computed(() => {
         maxWidth: item.maxWidth ? `${item.maxWidth}rem` : undefined
     });
 });
+
+const confirmChangeDivision = () => {
+    changeDivisionModal.value = true;
+    selectedDivision.value = null;
+};
+
+const changeDivision = async () => {
+    const formData = {
+        apartmentType: selectedDivision.value,
+        productIds: selectedProducts.value
+    };
+    await productService
+        .updateProductDivision(formData)
+        .then((res) => {
+            // Show success message
+            toast.add({
+                severity: 'success',
+                summary: 'Thành công',
+                detail: `Thay đổi Tòa nhà - phân khu thành công`,
+                life: 3000
+            });
+        })
+        .catch((err) => {
+            toast.add({
+                severity: 'error',
+                summary: 'Thất bại',
+                detail: `Thay đổi Tòa nhà - phân khu lỗi ${err}`,
+                life: 3000
+            });
+        })
+        .finally(() => {
+            resetData();
+            changeDivisionModal.value = false;
+        });
+};
 </script>
 
 <template>
@@ -1261,6 +1318,7 @@ const getColumnStyle = computed(() => {
                     <div class="flex flex-wrap gap-2">
                         <Button label="Thêm" icon="pi pi-plus" severity="secondary" size="small" @click="openNew" class="text-sm" />
                         <Button label="Xóa" v-if="isAdmin" icon="pi pi-trash" severity="secondary" size="small" @click="confirmDeleteSelected" :disabled="!selectedProducts || !selectedProducts.length" class="text-sm" />
+                        <Button label="Di chuyển" v-if="isAdmin" icon="pi pi-arrow-right-arrow-left" severity="secondary" size="small" @click="confirmChangeDivision" :disabled="!selectedProducts || !selectedProducts.length" class="text-sm" />
                     </div>
                 </template>
                 <template #end>
@@ -1397,6 +1455,18 @@ const getColumnStyle = computed(() => {
             <template #footer>
                 <Button label="Hủy" icon="pi pi-times" text @click="deleteProductDialog = false" />
                 <Button label="Xác nhận" icon="pi pi-check" @click="deleteProduct" />
+            </template>
+        </Dialog>
+
+        <Dialog v-model:visible="changeDivisionModal" class="w-[90vw] sm:w-[350px] md:w-[450px]" header="Chuyển tòa nhà - phân khu" :modal="true">
+            <div class="flex flex-col gap-y-2">
+                <label>Tòa nhà - Phân khu</label>
+                <Select v-model="selectedDivision" :options="divisions" optionLabel="label" optionValue="id" filter class="w-full" />
+                <small v-if="!selectedDivision" class="text-red-500">Vui lòng chọn tòa nhà - phân khu</small>
+            </div>
+            <template #footer>
+                <Button label="Hủy" icon="pi pi-times" text @click="changeDivisionModal = false" />
+                <Button label="Xác nhận" :disabled="!selectedDivision" icon="pi pi-check" @click="changeDivision" />
             </template>
         </Dialog>
 

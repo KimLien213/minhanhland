@@ -22,6 +22,8 @@ import { extname } from 'path';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { UpdateProductOrderDto } from './dto/update-product-order.dto';
+import { UpdateProductDivisionDto } from './dto/update-product-division.dto';
+import { BulkDeleteProductDto } from './dto/bulk-delete.product';
 
 @Controller('products')
 @UseGuards(AuthGuard('jwt'))
@@ -66,9 +68,19 @@ export class ProductController {
     return this.productService.updateProductOrder(dto);
   }
 
+   @Patch('update-division')
+  async updateDivision(@Body() dto: UpdateProductDivisionDto) {
+    return this.productService.updateProductDivision(dto);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.productService.remove(id);
+  }
+
+  @Post('bulk-delete')
+  async deleteBulk(@Body() dto: BulkDeleteProductDto) {
+    return this.productService.removeAll(dto);
   }
 
   @Get()

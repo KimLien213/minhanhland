@@ -15,9 +15,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
+      ignoreExpiration: true,
       secretOrKey: configService.get<string>('JWT_SECRET'),
-      passReqToCallback: true, // Cho phép truy cập request object
+      passReqToCallback: true,
     });
   }
 
@@ -30,27 +30,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Lấy IP hiện tại từ request
-    const currentIp = this.getClientIp(req);
+    // Lấy token từ header
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
     
-    // Nếu lastLoginIp chưa được set hoặc IP khác với IP đã lưu
-    if (!user.lastLoginIp || user.lastLoginIp !== currentIp) {
-      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.');
+    if (!token) {
+      throw new UnauthorizedException('Token not found');
     }
 
+    // Kiểm tra token có match với token trong DB không
+    if (!user.currentJwtToken || user.currentJwtToken !== token) {
+      throw new UnauthorizedException('Token không hợp lệ. Vui lòng đăng nhập lại.');
+    }
     return { 
       userId: payload.sub, 
       username: payload.username, 
       role: payload.role 
     };
   }
-
-  private getClientIp(req: any): string {
-  return (
-    req.connection?.remoteAddress ||
-    req.socket?.remoteAddress ||
-    req.ip ||
-    '127.0.0.1'
-  ).split(',')[0].trim();
-}
 }

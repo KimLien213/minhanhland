@@ -36,12 +36,20 @@ export const productService = {
         return axiosInstance.patch(`${BASE_URL}/update-order`, orderData);
     },
 
+    updateProductDivision(form) {
+        return axiosInstance.patch(`${BASE_URL}/update-division`, form);
+    },
+
     /**
      * Xoá sản phẩm theo ID
      * @param {number|string} id
      */
     remove(id) {
         return axiosInstance.delete(`${BASE_URL}/${id}`);
+    },
+
+    removeAll(form) {
+        return axiosInstance.post(`${BASE_URL}/bulk-delete`, form);
     },
 
     /**
